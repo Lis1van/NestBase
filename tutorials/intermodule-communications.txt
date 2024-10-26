@@ -1,0 +1,391 @@
+Модули, контроллеры и провайдеры
+
+Модули
+Модуль — это логическая единица, которая инкапсулирует определённые части функциональности приложения.
+ Каждый модуль может иметь свои контроллеры, провайдеры и импорты.
+
+Пример `app.module.ts`:
+
+import { Module } from '@nestjs/common';
+import { AppController } from './app.controller';
+import { AppService } from './app.service';
+
+@Module({
+  imports: [],
+  controllers: [AppController],
+  providers: [AppService],
+})
+export class AppModule {}
+
+Описание: Этот модуль импортирует контроллеры и провайдеры, необходимые для работы приложения.
+
+Контроллеры
+Контроллеры обрабатывают входящие HTTP-запросы и возвращают ответы клиенту. Они определяют маршруты (роуты) и
+логику обработки запросов.
+
+Пример контроллера:
+
+import { Controller, Get } from '@nestjs/common';
+import { AppService } from './app.service';
+
+@Controller()
+export class AppController {
+  constructor(private readonly appService: AppService) {}
+
+  @Get()
+  getHello(): string {
+    return this.appService.getHello();
+  }
+}
+
+Описание: Контроллер использует сервис для обработки GET-запроса на корневой маршрут и возвращает строку.
+
+Провайдеры
+Провайдеры — это классы, которые содержат основную бизнес-логику приложения. Они могут быть инжектированы в
+контроллеры или другие провайдеры.
+
+Пример сервиса:
+
+import { Injectable } from '@nestjs/common';
+
+@Injectable()
+export class AppService {
+  getHello(): string {
+    return 'Hello World!';
+  }
+}
+
+Описание: Этот сервис возвращает строку "Hello World!". Он инжектируется в контроллер через
+ механизм Dependency Injection.
+
+
+Запуск приложения
+
+Чтобы запустить приложение, выполните команду:
+
+npm run start:dev
+
+Приложение будет запущено в режиме разработки и будет доступно по адресу `http://localhost:3000`.
+
+ Заключение
+
+В этом уроке мы рассмотрели основы NestJS, включая установку, структуру проекта, создание модулей,
+контроллеров и провайдеров. В следующем уроке мы углубимся в работу с другими компонентами фреймворка.
+
+Урок 2: Генерация первого модуля в NestJS
+
+В предыдущем уроке мы создали и запустили первый проект на NestJS, познакомились с основными структурами и файлами,
+такими как контроллеры, модули и сервисы, а также обсудили основы NestJS и его работу с Express. В этом уроке мы продолжим развивать проект, добавляя новый модуль с использованием CLI NestJS.
+
+1. Генерация модуля с помощью NestJS CLI
+
+NestJS предоставляет мощный инструмент командной строки (**CLI**), который упрощает создание и управление
+элементами проекта. Мы уже установили CLI и создали базовый проект в предыдущем уроке.
+Теперь мы воспользуемся командой `generate`, чтобы создать новый модуль.
+
+Чтобы сгенерировать модуль, выполните следующую команду в терминале:
+
+nest g res users --no-spec
+
+Эта команда создаст новый модуль **Users** в папке `src`, которая уже содержит основные файлы проекта.
+
+Примечание:
+Команда `generate` позволяет создать множество различных элементов: модули, контроллеры, сервисы,
+фильтры и многое другое. Каждый элемент можно создавать отдельно или сразу в составе модуля.
+
+2. Структура созданного модуля
+
+После выполнения команды `generate`, в папке `src/users` появятся следующие файлы:
+- `users.module.ts` — файл модуля.
+- `users.controller.ts` — файл контроллера.
+- `users.service.ts` — файл сервиса.
+
+Файлы автоматически добавляются в главный модуль AppModule. Это значит, что UsersModule теперь является
+частью общего приложения.
+
+import { Module } from '@nestjs/common';
+import { UsersService } from './users.service';
+import { UsersController } from './users.controller';
+
+@Module({
+  controllers: [UsersController],
+  providers: [UsersService],
+})
+export class UsersModule {}
+
+Этот код показывает структуру модуля Users, который содержит контроллер и сервис, необходимые для работы
+с пользователями.
+
+Но мы , в данном случае, будем использовать генерация модуля с помощью nest generate resource
+Команда nest generate resource позволяет создавать не только модуль, но и сразу все необходимые компоненты
+для работы с конкретным ресурсом (например, пользователи, продукты). Это значительно ускоряет разработку и
+делает код более структурированным.
+Пример:
+
+nest generate resource users
+
+Эта команда создаст в папке src/users следующие файлы:
+- users.module.ts: Модуль, объединяющий все компоненты, связанные с пользователями.
+- users.controller.ts: Контроллер для обработки HTTP-запросов, связанных с пользователями
+(например, GET /users, POST /users).
+- users.service.ts: Сервис для реализации бизнес-логики, связанной с пользователями
+(например, создание пользователя, получение пользователя по ID).
+- user.entity.ts: Сущность (модель) для представления данных о пользователе в базе данных.
+- create-user.dto.ts: DTO (Data Transfer Object) для валидации и передачи данных при создании пользователя.
+- update-user.dto.ts: DTO для валидации и передачи данных при обновлении пользователя.
+
+Объяснение:
+
+users.module.ts:
+
+import { Module } from '@nestjs/common';
+import { UsersService } from './users.service';
+import { UsersController } from './users.controller';
+
+@Module({
+  controllers: [UsersController],
+  providers: [UsersService],
+})
+export class UsersModule {}
+
+Этот модуль импортирует TypeOrmModule для работы с базой данных, регистрирует сущность User и связывает
+ контроллер и сервис с модулем.
+
+
+users.controller.ts:
+
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+} from '@nestjs/common';
+
+import { CreateUserDto } from './dto/create-user.dto';
+import { UpdateUserDto } from './dto/update-user.dto';
+import { UsersService } from './users.service';
+
+@Controller('users')
+export class UsersController {
+  constructor(private readonly usersService: UsersService) {}
+
+  @Post()
+  create(@Body() createUserDto: CreateUserDto) {
+    return this.usersService.create(createUserDto);
+  }
+
+  @Get()
+  findAll() {
+    return this.usersService.findAll();
+  }
+
+  @Get(':id')
+  findOne(@Param('id') id: string) {
+    return this.usersService.findOne(+id);
+  }
+
+  @Patch(':id')
+  update(@Param('id') id: string, @Body() updateUserDto: UpdateUserDto) {
+    return this.usersService.update(+id, updateUserDto);
+  }
+
+  @Delete(':id')
+  remove(@Param('id') id: string) {
+    return this.usersService.remove(+id);
+  }
+}
+
+Контроллер определяет маршруты (endpoints) для работы с пользователями. Например, @Post() создает маршрут
+для создания нового пользователя, а @Get() для получения списка всех пользователей.
+
+
+users.service.ts:
+
+import { Injectable } from '@nestjs/common';
+import { CreateUserDto } from './dto/create-user.dto';
+import { UpdateUserDto } from './dto/update-user.dto';
+
+@Injectable()
+export class UsersService {
+  create(createUserDto: CreateUserDto) {
+    return 'This action adds a new user';
+  }
+
+  findAll() {
+    return `This action returns all users`;
+  }
+
+  findOne(id: number) {
+    return `This action returns a #${id} user`;
+  }
+
+  update(id: number, updateUserDto: UpdateUserDto) {
+    return `This action updates a #${id} user`;
+  }
+
+  remove(id: number) {
+    return `This action removes a #${id} user`;
+  }
+}
+
+Сервис содержит бизнес-логику для работы с пользователями. Например, метод create создает нового пользователя,
+а метод findAll возвращает список всех пользователей.
+
+
+user.entity.ts:
+
+export class User {}
+
+Сущность User определяет структуру данных о пользователе в базе данных (класс опишем в следующих уроках).
+
+
+create-user.dto.ts:
+
+export class CreateUserDto {}
+
+и update-user.dto.ts:
+
+import { PartialType } from '@nestjs/mapped-types';
+import { CreateUserDto } from './create-user.dto';
+
+export class UpdateUserDto extends PartialType(CreateUserDto) {}
+
+
+DTO используются для валидации данных, передаваемых в контроллер (их так же заполним данными на следующих уроках).
+
+Преимущества nest generate resource:
+Ускорение разработки: Автоматическое создание всех необходимых файлов.
+Стандартизация кода: Обеспечение согласованности структуры проекта.
+Улучшение читаемости: Логическое разделение ответственности между компонентами.
+Встроенная поддержка валидации данных: Использование DTO для проверки входящих данных.
+Вывод:
+Команда nest generate resource является мощным инструментом для быстрого создания модулей в NestJS.
+Она позволяет значительно упростить процесс разработки и повысить качество кода.
+
+
+3. Взаимодействие между модулями
+
+Модули в NestJS изолированы друг от друга, но могут быть связаны с помощью импорта.
+Главный модуль (`app.module.ts`) отвечает за регистрацию всех других модулей, создавая общую систему:
+
+import { Module } from '@nestjs/common';
+
+import { AppController } from './app.controller';
+import { AppService } from './app.service';
+import { UsersModule } from './users/users.module';
+
+@Module({
+  imports: [UsersModule],
+  controllers: [AppController],
+  providers: [AppService],
+})
+export class AppModule {}
+
+В файле `app.module.ts` автоматически был добавлен импорт UsersModule, чтобы система могла его использовать.
+(добавить описание взаимодействия модулей между собой , не только в appmodule,
+добавить описание что такое циркулярка(forwardref) в взаимодействиях между модулями, добавить ссылку на документацию)
+
+4. Запуск и проверка работы
+
+После генерации модуля можно запустить приложение командой:
+
+npm run start:dev
+
+Логи терминала покажут, что приложение успешно запущено, и теперь у нас доступен новый
+маршрут `/users`. Этот маршрут уже автоматически создан благодаря файлам, сгенерированным CLI:
+
+[Nest] 11684  - 17.10.2024, 17:59:05     LOG [NestFactory] Starting Nest application...
+[Nest] 11684  - 17.10.2024, 17:59:05     LOG [InstanceLoader] AppModule dependencies initialized +22ms
+[Nest] 11684  - 17.10.2024, 17:59:05     LOG [InstanceLoader] UsersModule dependencies initialized +1ms
+[Nest] 11684  - 17.10.2024, 17:59:05     LOG [RoutesResolver] AppController {/}: +13ms
+[Nest] 11684  - 17.10.2024, 17:59:05     LOG [RouterExplorer] Mapped {/, GET} route +6ms
+[Nest] 11684  - 17.10.2024, 17:59:05     LOG [RoutesResolver] UsersController {/users}: +1ms
+[Nest] 11684  - 17.10.2024, 17:59:05     LOG [RouterExplorer] Mapped {/users, POST} route +1ms
+[Nest] 11684  - 17.10.2024, 17:59:05     LOG [RouterExplorer] Mapped {/users, GET} route +1ms
+[Nest] 11684  - 17.10.2024, 17:59:05     LOG [RouterExplorer] Mapped {/users/:id, GET} route +1ms
+[Nest] 11684  - 17.10.2024, 17:59:05     LOG [RouterExplorer] Mapped {/users/:id, PATCH} route +1ms
+[Nest] 11684  - 17.10.2024, 17:59:05     LOG [RouterExplorer] Mapped {/users/:id, DELETE} route +1ms
+[Nest] 11684  - 17.10.2024, 17:59:05     LOG [NestApplication] Nest application successfully started +3ms
+
+- {/users, GET} — получение всех пользователей.
+- {/users, POST}— создание нового пользователя.
+- {/users/:id, GET} — получение пользователя по ID.
+- {/users/:id, PATCH}  — обновление данных пользователя.
+-{/users/:id, DELETE}  — удаление пользователя.
+
+Эти маршруты созданы благодаря файлу `users.controller.ts`, который содержит базовую
+реализацию CRUD (Create, Read, Update, Delete) операций.
+
+Пример кода контроллера:
+
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  Patch,
+  Post,
+} from '@nestjs/common';
+
+import { CreateUserDto } from './dto/create-user.dto';
+import { UpdateUserDto } from './dto/update-user.dto';
+import { UsersService } from './users.service';
+
+@Controller('users')
+export class UsersController {
+  constructor(private readonly usersService: UsersService) {}
+
+  @Post()
+  create(@Body() createUserDto: CreateUserDto) {
+    return this.usersService.create(createUserDto);
+  }
+
+  @Get()
+  findAll() {
+    return this.usersService.findAll();
+  }
+
+  @Get(':id')
+  findOne(@Param('id') id: string) {
+    return this.usersService.findOne(+id);
+  }
+
+  @Patch(':id')
+  update(@Param('id') id: string, @Body() updateUserDto: UpdateUserDto) {
+    return this.usersService.update(+id, updateUserDto);
+  }
+
+  @Delete(':id')
+  remove(@Param('id') id: string) {
+    return this.usersService.remove(+id);
+  }
+}
+
+5. Динамические параметры и работа с ID
+
+Обратите внимание на динамическую часть маршрута `/:id`. Она позволяет передавать ID пользователя через URL.
+В контроллере этот ID будет автоматически извлечён с помощью декоратора `@Param()`:
+
+@Get(':id')
+  findOne(@Param('id') id: string) {
+    return this.usersService.findOne(+id);
+  }
+
+Здесь `@Param('id')` указывает на то, что параметр ID должен быть захвачен из URL и передан в метод контроллера.
+
+6. Генерация и использование тестов
+
+При создании модулей автоматически генерируются тестовые файлы с расширением `.spec.ts`,
+которые предназначены для написания юнит-тестов. Эти файлы помогут вам тестировать каждый модуль,
+сервис или контроллер отдельно, что особенно полезно для поддержания высокого качества кода.
+
+Хотя мы не будем детально рассматривать тестирование в этом уроке, важно знать, что файлы для тестирования
+уже созданы и ждут своей очереди.
+На этом этапе мы завершили создание первого модуля Users и связали его с главным приложением.
+В следующих уроках мы углубимся в работу с сервисами и базами данных.
+
+Продолжение следует в следующем уроке.
