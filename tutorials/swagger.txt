@@ -227,3 +227,168 @@ SwaggerModule.setup('api', app, document, {
  не только упрощает работу с API, но и улучшает взаимодействие с клиентами и тестирование.
 
 > Дополнительную информацию можно найти в [официальной документации NestJS Swagger](https://docs.nestjs.com/openapi/introduction).
+
+### Глава: Описание и обработка ответов в NestJS с помощью DTO
+
+#### Краткий обзор предыдущего урока
+На предыдущем уроке мы изучили, как создавать DTO (Data Transfer Object) для входящих данных,
+использовавших такие поля, как имя, email и пароль, а также добавлять аннотации для Swagger,
+чтобы создавать документацию для API.
+
+#### Связь с новым уроком
+Теперь мы сосредоточимся на описании структур ответов API с помощью DTO, рассмотрим обработку различных
+типов ответов (успешные и ошибки) и узнаем, как сгенерировать документацию для ответов API в Swagger.
+
+---
+
+### Создание DTO для описания структуры ответов API
+
+Использование DTO для описания структуры ответов помогает документировать, какие именно данные вернёт API,
+и тем самым облегчает разработку, тестирование и поддержку.
+
+##### Создание `UserResponseDto`
+Чтобы структурировать ответ для сущности пользователя, создадим `UserResponseDto`, содержащий нужные поля:
+1. Создайте папку `users/dto/res`, чтобы отделить DTO для описания входных и выходных данных.
+2. В этой папке создайте файл `user.response.dto.ts`, который будет описывать структуру ответа для пользователя.
+
+```typescript
+import { ApiProperty } from '@nestjs/swagger';
+
+export class UserResponseDto {
+  @ApiProperty() // Описание уникального идентификатора
+  id: string;
+
+  @ApiProperty({ description: 'Имя пользователя', default: 'Ivan' }) // Указание описания и значения по умолчанию
+  name: string;
+
+  @ApiProperty({
+    description: 'Email пользователя',
+    default: 'ivan@gmail.com',
+  }) // Указание описания и значения по умолчанию
+  email: string;
+
+  @ApiProperty() // Пароль пользователя
+  password: string;
+}
+```
+
+> Пояснение: Декоратор `@ApiProperty` позволяет описывать каждое поле в `UserResponseDto`,
+делая его доступным для Swagger. Если декоратор не указан, Swagger не сможет отобразить это поле в документации.
+
+---
+
+### Добавление DTO для описания структуры ответов в контроллер
+
+Теперь мы можем использовать наш `UserResponseDto` в контроллере для описания успешного ответа.
+
+#### Пример кода
+```typescript
+import {
+  Body,
+  Controller,
+  Post,
+} from '@nestjs/common';
+import {
+  ApiConflictResponse,
+  ApiCreatedResponse,
+  ApiTags,
+} from '@nestjs/swagger';
+
+import { CreateUserDto } from './dto/req/create-user.dto';
+import { UserResponseDto } from './dto/res/user.response.dto';
+import { UsersService } from './users.service';
+
+@ApiTags('users') // Указание категории для Swagger-документации
+@Controller('users')
+export class UsersController {
+  constructor(private readonly usersService: UsersService) {}
+
+  @Post()
+  @ApiCreatedResponse({ type: UserResponseDto }) // Описание успешного ответа
+  @ApiConflictResponse({ description: 'User already exists' }) // Описание ответа при конфликте
+  create(@Body() createUserDto: CreateUserDto): UserResponseDto {
+    return this.usersService.create(createUserDto) as UserResponseDto;
+  }
+}
+```
+
+> Пояснение: Аннотация `@ApiCreatedResponse` позволяет указать успешный ответ, который будет отображен в документации.
+Аннотация `@ApiConflictResponse` описывает возможную ошибку при попытке создать уже существующего пользователя.
+
+---
+
+### Обработка различных типов ответов и ошибок
+
+Чтобы API был максимально информативен, можно добавить описание других возможных ответов, например,
+«404 Not Found» или «409 Conflict».
+
+```typescript
+import { ApiNotFoundResponse } from '@nestjs/swagger';
+
+@Get(':id')
+@ApiNotFoundResponse({ description: 'User not found' }) // Ответ, если пользователь не найден
+findOne(@Param('id') id: string) {
+  return this.usersService.findOne(+id);
+}
+```
+
+> Пояснение: Использование `@ApiNotFoundResponse` помогает указать ответ, если запрашиваемый ресурс не найден.
+Это особенно полезно для создания более полной документации в Swagger.
+
+---
+
+### Автоматическая генерация метаданных с помощью плагина
+
+Добавление метаданных вручную для каждого DTO может быть трудоёмким процессом. Чтобы автоматизировать это,
+можно использовать плагин `@nestjs/swagger`, который будет собирать метаданные автоматически,
+основываясь на типах данных.
+
+1. Откройте файл `nest-cli.json` и добавьте параметр `"plugins": ["@nestjs/swagger"]`:
+
+```json
+{
+  "$schema": "https://json.schemastore.org/nest-cli",
+  "collection": "@nestjs/schematics",
+  "sourceRoot": "src",
+  "compilerOptions": {
+    "deleteOutDir": true,
+    "plugins": ["@nestjs/swagger"]
+  }
+}
+```
+
+2. Благодаря этому плагину, `@ApiProperty()` можно не писать везде, так как плагин соберёт метаданные на основе типов.
+Поля, требующие дополнительного описания (например, пример или значение по умолчанию), можно аннотировать отдельно.
+
+3. В Swagger поля, помеченные `?`, будут отображаться как необязательные (без звёздочки).
+
+#### Пример
+
+```typescript
+export class OptionalUserResponseDto {
+  @ApiProperty({ example: 'john@example.com' }) // Пример использования описания поля
+  email: string;
+
+  // Поле phoneNumber будет отображено в Swagger как необязательное
+  phoneNumber?: string;
+}
+```
+
+> Пояснение: В этом примере `email` аннотировано с примером данных. Поле `phoneNumber` автоматически
+становится необязательным в документации, что обозначает это свойство в Swagger как опциональное.
+
+---
+
+### Заключение
+
+Мы рассмотрели:
+- Создание DTO для описания структуры ответов.
+- Описание успешных и ошибочных ответов.
+- Использование плагина `@nestjs/swagger` для автоматической генерации метаданных и упрощения структуры кода.
+
+Swagger и DTO делают процесс документирования API более простым и прозрачным.
+Данный подход также помогает организовать и стандартизировать ответы от API,
+что особенно полезно при расширении функционала.
+
+**Ссылка на документацию:**
+- [NestJS Swagger](https://docs.nestjs.com/openapi/introduction)
