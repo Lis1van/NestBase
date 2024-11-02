@@ -1,0 +1,265 @@
+Работа с конфигурацией в NestJS
+
+**Краткий обзор:**
+В этом уроке мы разберем, как управлять конфигурацией в приложении на NestJS.
+Конфигурация включает настройку окружения, использование переменных окружения и создание глобальных параметров,
+доступных в любом модуле. Для эффективного управления конфигурацией будем использовать модуль `ConfigModule`,
+специально разработанный для работы с настройками в NestJS. Подробно рассмотрим установку,
+типизацию и использование этого модуля в приложении.
+
+---
+
+#### Установка `ConfigModule`
+
+Для централизованного управления переменными окружения NestJS предлагает использовать модуль `ConfigModule`.
+Этот модуль упрощает доступ к переменным окружения и делает их доступными в любом месте приложения.
+
+**Установка:**
+Выполним команду для добавления `ConfigModule`:
+
+```bash
+npm install @nestjs/config
+```
+
+**Подключение модуля конфигураций:**
+После установки импортируем модуль в основной модуль приложения, `AppModule`.
+В параметрах подключения модуля укажем файл, содержащий функцию конфигурации, и зададим настройку,
+позволяющую сделать `ConfigModule` глобальным.
+
+// app.module.ts
+import { Module } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
+
+import { ArticlesModule } from './articles/articles.module';
+import { CommentsModule } from './comments/comments.module';
+import configuration from './configs/configuration';
+import { UsersModule } from './users/users.module';
+
+@Module({
+  imports: [
+    ConfigModule.forRoot({
+      load: [configuration],
+      isGlobal: true,
+    }),
+    ArticlesModule,
+    UsersModule,
+    CommentsModule,
+  ],
+})
+export class AppModule {}
+
+- **Зачем использовать параметр `isGlobal: true`**: с этой настройкой `ConfigModule` доступен в любом модуле,
+что избавляет от необходимости импортировать его заново. Это упрощает доступ к переменным окружения в других
+частях приложения.
+
+---
+
+#### Создание файла конфигурации
+
+Рекомендуется создавать отдельные файлы конфигурации, что делает проект более организованным и масштабируемым.
+В папке `configs` создадим файл `configuration.ts`, в котором будет определена конфигурация с использованием
+переменных окружения.
+
+import { ConfigType } from './config.type';
+
+export default (): ConfigType => ({
+  app: {
+    port: parseInt(process.env.APP_PORT, 10) || 3003,
+    host: process.env.APP_HOST,
+  },
+  postgres: {
+    host: process.env.POSTGRES_HOST,
+    port: parseInt(process.env.POSTGRES_PORT, 10) || 5432,
+    username: process.env.POSTGRES_USER,
+    password: process.env.POSTGRES_PASSWORD,
+    database: process.env.POSTGRES_NAME,
+  },
+  redis: {
+    host: process.env.REDIS_HOST,
+    port: parseInt(process.env.REDIS_PORT, 10) || 6379,
+    password: process.env.REDIS_PASSWORD,
+  },
+});
+
+- **Функция конфигурации:** функция `configuration` возвращает объект с параметрами,
+такими как настройки приложения (`app`) и базы данных (`database`). Здесь мы используем `process.env` для
+чтения значений из переменных окружения, например, `APP_PORT` и `DATABASE_HOST`.
+
+**Важно:**
+Добавьте `.env` файл в корневую директорию проекта для хранения значений переменных окружения.
+
+APP_PORT=3000
+APP_HOST=localhost
+
+POSTGRES_HOST=localhost
+POSTGRES_PORT=5432
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=postgres
+POSTGRES_NAME=nest_base
+
+REDIS_HOST=localhost
+REDIS_PORT=6379
+REDIS_PASSWORD=redispass
+
+Сейчас настройки, такие как порт и хост, берутся из файла `.env` (или из значений по умолчанию,
+если переменные окружения не заданы). Это позволяет легко изменять конфигурацию для различных
+окружений (разработка, тестирование, продакшен).
+
+[Подробнее о `ConfigModule` в документации NestJS](https://docs.nestjs.com/techniques/configuration#installation)
+
+---
+
+#### Использование конфигурации в `main.ts`
+
+Теперь, когда у нас есть глобальная конфигурация, мы можем использовать её для настройки сервера.
+В файле `main.ts` подключим `ConfigService` для доступа к конфигурации.
+
+import { ValidationPipe } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { NestFactory } from '@nestjs/core';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+
+import { AppModule } from './app.module';
+import { SwaggerHelper } from './common/helpers/swagger.helper';
+import { AppConfig } from './configs/config.type';
+
+async function bootstrap() {
+  const app = await NestFactory.create(AppModule);
+
+  const config = new DocumentBuilder()
+    .setTitle(
+      'Пошаговое руководство по созданию и настройке проекта NestJS со Swagger',
+    )
+    .setDescription(
+      'Подробное пошаговое руководство по созданию и настройке проекта NestJS с использованием Swagger ' +
+        'для автоматической генерации документации API. Вы узнаете, как настроить Swagger модуль, ' +
+        'описать свои API, а также как использовать интерактивную документацию для тестирования.',
+    )
+    .setVersion('1.0')
+    .addBearerAuth({
+      in: 'header',
+      type: 'http',
+      scheme: 'bearer',
+      bearerFormat: 'JWT',
+    })
+    .build();
+
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      transform: true,
+      forbidNonWhitelisted: true,
+    }),
+  );
+
+  const document = SwaggerModule.createDocument(app, config);
+  SwaggerHelper.setDefaultResponses(document);
+  SwaggerModule.setup('docs', app, document, {
+    swaggerOptions: {
+      docExpansion: 'list',
+      defaultModelsExpandDepth: 7,
+      persistAuthorization: true,
+    },
+  });
+  const configService = app.get(ConfigService);
+  const appConfig = configService.get<AppConfig>('app');
+  // console.log(appConfig);
+
+  await app.listen(appConfig.port, () => {
+    console.log(
+      `Server is running on http://${appConfig.host}:${appConfig.port}`,
+    );
+    console.log(
+      `Swagger is running on http://${appConfig.host}:${appConfig.port}/docs`,
+    );
+  });
+}
+void bootstrap();
+
+---
+
+#### Типизация конфигурации
+
+Для строгой типизации конфигурационных данных создадим файл типов конфигурации в папке `configs`:
+
+export type ConfigType = {
+  app: AppConfig;
+  postgres: PostgresConfig;
+  redis: RedisConfig;
+};
+
+export type AppConfig = {
+  port: number;
+  host: string;
+};
+
+export type PostgresConfig = {
+  host: string;
+  port: number;
+  username: string;
+  password: string;
+  database: string;
+};
+
+export type RedisConfig = {
+  host: string;
+  port: number;
+  password: string;
+};
+
+- **Преимущество типизации**: с типизацией `ConfigService` будет возвращать корректные данные и предотвращать
+ошибки при доступе к конфигурации.
+
+---
+
+#### Пример использования конфигурации в сервисе
+
+Теперь, когда у нас есть типизированная конфигурация, можем получить доступ к нужным данным в других сервисах.
+ Для этого обычно добавляют `ConfigService` в конструктор сервиса.
+
+import { Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+
+import { AppConfig, ConfigType } from '../configs/config.type';
+import { CreateUserReqDto } from './models/dto/req/create-user.req.dto';
+import { UpdateUserReqDto } from './models/dto/req/update-user.req.dto';
+import { UserResDto } from './models/dto/res/user.res.dto';
+
+@Injectable()
+export class UsersService {
+  constructor(private readonly configService: ConfigService<ConfigType>) {}
+
+  public async create(createUserDto: CreateUserReqDto): Promise<UserResDto> {
+    const appConfig = this.configService.get<AppConfig>('postgres');
+    console.log(appConfig);
+    return {} as UserResDto;
+  }
+
+  findAll() {
+    return `This action returns all users`;
+  }
+
+  findOne(id: number) {
+    return `This action returns a #${id} user`;
+  }
+
+  update(id: number, updateUserDto: UpdateUserReqDto) {
+    return `This action updates a #${id} user`;
+  }
+
+  remove(id: number) {
+    return `This action removes a #${id} user`;
+  }
+
+  public async checkAbilityToEditArticle(userId: string, articleId: string) {
+    // Check if the user has permission to edit the article
+  }
+}
+
+---
+
+#### Применение на практике
+
+Теперь с `ConfigService` и типизацией конфигурации приложение стало проще в поддержке.
+Мы можем легко изменять настройки для разных окружений (например, для разработки и продакшена),
+используя отдельные `.env` файлы, и приложение автоматически подстроится под них благодаря `ConfigModule`.
