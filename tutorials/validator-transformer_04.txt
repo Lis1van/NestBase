@@ -1,0 +1,207 @@
+### Глава: Валидация и Трансформация Данных в NestJS
+
+#### Краткий обзор предыдущего урока
+
+В предыдущем уроке мы рассмотрели, как DTO помогает структурировать данные, которые поступают в контроллеры NestJS,
+а также как с его помощью можно улучшить читаемость и поддержку кода. В этом уроке мы погрузимся в валидацию и
+трансформацию данных, чтобы обеспечить правильную обработку и безопасность данных. Эти инструменты помогут
+обезопасить приложение от некорректных или опасных данных и облегчить преобразование данных для удобной обработки
+в сервисах и бизнес-логике приложения.
+
+### Зачем нужна валидация и трансформация данных?
+
+Валидация помогает предотвратить ошибки, проверяя корректность входящих данных и тем самым защищая приложение
+от некорректных запросов. С другой стороны, трансформация данных позволяет привести данные в нужный формат или тип,
+обеспечивая правильную интерпретацию и манипуляцию данными внутри приложения.
+
+В NestJS для этих целей используются два основных пакета:
+1. **`class-validator`** — для проверки данных.
+2. **`class-transformer`** — для преобразования данных.
+
+> Подробнее: [Документация class-validator](https://github.com/typestack/class-validator) и
+ [Документация class-transformer](https://github.com/typestack/class-transformer).
+
+### Установка и настройка пакетов
+
+Для начала установим `class-validator` и `class-transformer`, используя команду:
+
+```bash
+npm install --save class-validator class-transformer
+```
+
+После установки настроим глобальное использование валидации для всех запросов в приложении.
+Это делается с помощью `ValidationPipe`, который подключается в файле `main.ts`.
+
+```typescript
+// main.ts
+
+import { ValidationPipe } from '@nestjs/common';
+import { NestFactory } from '@nestjs/core';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { AppModule } from './app.module';
+
+async function bootstrap() {
+  const app = await NestFactory.create(AppModule);
+
+  const config = new DocumentBuilder()
+    .setTitle('Demo example')
+    .setDescription('The demo API description')
+    .setVersion('1.0.0')
+    .addBearerAuth({
+      in: 'header',
+      type: 'http',
+      scheme: 'bearer',
+      bearerFormat: 'JWT',
+    })
+    .build();
+  const documentFactory = () => SwaggerModule.createDocument(app, config);
+  SwaggerModule.setup('api', app, documentFactory, {
+    swaggerOptions: {
+      docExpansion: 'list',
+      defaultModelsExpandDepth: 1,
+      persistAuthorization: true,
+    },
+  });
+
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true, // Удаляет поля, не указанные в DTO
+      forbidNonWhitelisted: true, // Запрещает запросы с неуказанными в DTO полями
+      transform: true, // Автоматически преобразует типы данных
+    }),
+  );
+
+  await app.listen(3000);
+}
+bootstrap();
+```
+
+#### Параметры настройки `ValidationPipe`
+
+- `whitelist: true` — удаляет поля, не указанные в DTO, что позволяет игнорировать нежелательные данные.
+- `forbidNonWhitelisted: true` — отклоняет запросы с полями, не описанными в DTO, выбрасывая ошибку.
+- `transform: true` — автоматически преобразует типы данных на основе декораторов,
+указанных в DTO (например, `@Type(() => Date)` из `class-transformer`).
+
+### Настройка валидации полей в DTO
+
+Теперь добавим валидацию в DTO, чтобы задать ограничения для входных данных.
+Создадим `CreateUserDto` для регистрации пользователя.
+
+```typescript
+// create-user.dto.ts
+
+import { IsString, IsEmail, MinLength } from 'class-validator';
+
+export class CreateUserDto {
+  @IsString()
+  @MinLength(3)
+  name: string; // Поле name должно быть строкой с минимум 3 символами
+
+  @IsEmail()
+  email: string; // Поле email должно быть корректным email-адресом
+
+  @IsString()
+  @MinLength(6)
+  password: string; // Поле password должно быть строкой с минимум 6 символами
+}
+```
+
+#### Примеры используемых декораторов `class-validator`
+
+- `@IsString()` — проверяет, что значение является строкой.
+- `@MinLength(n)` — задает минимальную длину строки.
+- `@IsEmail()` — проверяет, что значение является корректным email.
+
+> Подробнее: Полный список валидаторов `class-validator` можно найти
+в [официальной документации](https://github.com/typestack/class-validator#validation-decorators).
+
+### Пример использования DTO в контроллере
+
+Теперь добавим новый маршрут в контроллер, чтобы использовать `CreateUserDto`.
+
+```typescript
+// users.controller.ts
+
+import { Body, Controller, Post } from '@nestjs/common';
+import { CreateUserDto } from './dto/create-user.dto';
+
+@Controller('users')
+export class UsersController {
+  @Post('create')
+  createUser(@Body() createUserDto: CreateUserDto) {
+    return 'User created!'; // Логика создания пользователя
+  }
+}
+```
+
+### Использование `class-transformer` для преобразования данных
+
+Для преобразования данных можно использовать декораторы из `class-transformer`, например,
+чтобы автоматически преобразовать строку в `Date`.
+
+```typescript
+// create-user.dto.ts
+
+import { Type } from 'class-transformer';
+import { IsEmail, IsOptional, IsString, MinLength } from 'class-validator';
+
+export class CreateUserDto {
+  @IsString()
+  @MinLength(3)
+  name: string;
+
+  @IsEmail()
+  email: string;
+
+  @IsString()
+  @MinLength(8)
+  password: string;
+
+  @Type(() => Date)
+  @IsOptional()
+  date: Date; // Декоратор @Type преобразует строку в объект Date
+}
+```
+
+Теперь поле `date` будет автоматически преобразовываться в объект `Date`, что помогает избежать проблем с форматом даты.
+
+#### Тримминг строк с помощью декоратора `@Transform`
+
+С помощью декоратора `@Transform()` можно удалять пробелы в строках, что полезно для текстовых полей.
+
+```typescript
+import { Transform, Type } from 'class-transformer';
+import { IsEmail, IsOptional, IsString, MinLength } from 'class-validator';
+
+export class CreateUserDto {
+  @Transform(({ value }) => value.trim()) // Удаляет лишние пробелы
+  @MinLength(3)
+  @IsString()
+  name: string;
+
+  @IsEmail()
+  email: string;
+
+  @MinLength(8)
+  @IsString()
+  password: string;
+
+  @Type(() => Date)
+  @IsOptional()
+  date: Date;
+}
+```
+
+> Подробно про декораторы из `class-transformer`:
+[Документация class-transformer](https://github.com/typestack/class-transformer#usage).
+
+### Заключение
+
+На этом уроке мы рассмотрели, как с помощью `class-validator` и `class-transformer` можно улучшить
+обработку данных в приложении NestJS. Настройка валидации и трансформации на основе DTO позволяет разработчику
+избавиться от необходимости вручную проверять данные и гарантировать, что входящие данные всегда соответствуют
+нужному формату.
+
+Эти инструменты играют важную роль, особенно для приложений с публичными API, где важно защищать сервер от
+некорректных данных и обеспечить их правильную обработку.
