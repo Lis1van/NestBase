@@ -9,6 +9,7 @@
     "build": "nest build",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "nest start",
+    "start:docker:local": "docker compose -f docker-compose.local.yaml up --build",
     "start:dev": "nest start --watch",
     "start:debug": "nest start --env-file ./environments/local.env --debug --watch",
     "start:prod": "node --env-file ./environments/local.env dist/main",
