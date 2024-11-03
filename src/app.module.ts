@@ -1,10 +1,11 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 
-import { ArticlesModule } from './articles/articles.module';
-import { CommentsModule } from './comments/comments.module';
 import configuration from './configs/configuration';
-import { UsersModule } from './users/users.module';
+import { ArticlesModule } from './modules/articles/articles.module';
+import { CommentsModule } from './modules/comments/comments.module';
+import { HealthModule } from './modules/health/health.module';
+import { UsersModule } from './modules/users/users.module';
 
 @Module({
   imports: [
@@ -15,6 +16,7 @@ import { UsersModule } from './users/users.module';
     ArticlesModule,
     UsersModule,
     CommentsModule,
+    HealthModule,
   ],
 })
 export class AppModule {}
