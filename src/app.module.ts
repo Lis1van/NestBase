@@ -5,6 +5,7 @@ import configuration from './configs/configuration';
 import { ArticlesModule } from './modules/articles/articles.module';
 import { CommentsModule } from './modules/comments/comments.module';
 import { HealthModule } from './modules/health/health.module';
+import { PostgresModule } from './modules/postgres/postgres.module';
 import { UsersModule } from './modules/users/users.module';
 
 @Module({
@@ -13,10 +14,12 @@ import { UsersModule } from './modules/users/users.module';
       load: [configuration],
       isGlobal: true,
     }),
+    PostgresModule,
     ArticlesModule,
     UsersModule,
     CommentsModule,
     HealthModule,
+    PostgresModule,
   ],
 })
 export class AppModule {}

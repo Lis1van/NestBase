@@ -1,0 +1,329 @@
+# Подключение базы данных с использованием TypeORM в NestJS
+
+## Введение в TypeORM и PostgreSQL
+
+### Что такое TypeORM?
+
+TypeORM — это **Object-Relational Mapping** библиотека, или ORM, которая служит "мостом" между нашей
+базой данных и приложением. ORM позволяет манипулировать данными, создавая объекты JavaScript/TypeScript,
+которые отображаются в базы данных. В отличие от Mongoose (предназначенного для работы с MongoDB),
+TypeORM поддерживает работу с реляционными базами данных, такими как **PostgreSQL**, **MySQL**, **MariaDB** и др.
+
+#### Важно:
+- **ORM** автоматически генерирует SQL-запросы, упрощая работу с данными.
+- TypeORM предоставляет возможности **связей** (relations), **валидаций** (constraints)
+ и **миграций** (migrations) — функций, упрощающих управление структурой и состоянием базы данных.
+
+### Что такое PostgreSQL?
+
+**PostgreSQL** — это одна из самых популярных реляционных баз данных с открытым исходным кодом,
+которая поддерживает сложные SQL-запросы, транзакции и строгие ограничения данных.
+В реляционных базах данных данные сохраняются в таблицах, каждая из которых имеет набор столбцов
+с определёнными типами данных, и строки, представляющие записи.
+
+## Шаг 1: Установка TypeORM и адаптера PostgreSQL
+
+Для работы с PostgreSQL в проекте NestJS нам нужно установить несколько зависимостей:
+```bash
+npm install @nestjs/typeorm typeorm pg
+```
+
+- **@nestjs/typeorm** — это пакет для интеграции TypeORM с NestJS.
+- **typeorm** — основная библиотека для работы с базой данных.
+- **pg** — адаптер для взаимодействия TypeORM и PostgreSQL.
+
+## Шаг 2: Настройка подключения к базе данных
+
+### Создание базовой конфигурации в `AppModule`
+
+Теперь настроим подключение к базе данных, используя `TypeOrmModule`.
+В основном модуле приложения (`AppModule`) добавим подключение к базе данных с помощью `TypeOrmModule.forRoot`.
+
+**Пример кода:**
+```typescript
+import { Module } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
+import { TypeOrmModule } from '@nestjs/typeorm';
+
+import configuration from './configs/configuration';
+import { ArticlesModule } from './modules/articles/articles.module';
+import { CommentsModule } from './modules/comments/comments.module';
+import { HealthModule } from './modules/health/health.module';
+import { UsersModule } from './modules/users/users.module';
+
+@Module({
+  imports: [
+    // Глобальная конфигурация приложения
+    ConfigModule.forRoot({
+      load: [configuration], // Подключение конфигурации
+      isGlobal: true, // Доступ к конфигурации из любой части приложения
+    }),
+    TypeOrmModule.forRoot({
+      type: 'postgres',
+      host: 'localhost',
+      port: 5433,
+      username: 'postgres',
+      password: 'postgres',
+      database: 'nest_base',
+      entities: [], // Сюда будут добавлены наши Entity
+      synchronize: false, // Указывает, будет ли ORM автоматически синхронизировать базу данных
+    }),
+    ArticlesModule,
+    UsersModule,
+    CommentsModule,
+    HealthModule,
+  ],
+})
+export class AppModule {}
+```
+
+### На практике: Параметры подключения
+
+- **type:** указывает на тип базы данных, здесь это PostgreSQL.
+- **host, port, username, password, database** — данные для подключения.
+- **entities** — сюда нужно будет добавить наши классы-сущности (entities).
+- **synchronize** — если установить `true`, TypeORM будет автоматически обновлять структуру таблиц
+в базе данных при каждом запуске приложения (не рекомендуется для продакшена).
+
+#### Важно
+*Автоматическая синхронизация базы* (`synchronize: true`) удобна при разработке,
+но её не следует использовать в продакшене, так как это может привести к потере данных.
+Вместо этого рекомендуется использовать миграции.
+
+## Шаг 3: Асинхронная настройка подключения (async/await)
+
+В `AppModule` мы можем задать конфигурацию подключения к базе данных асинхронно,
+чтобы подгрузить необходимые параметры (например, хост, порт, логин и пароль) из отдельного конфигурационного модуля.
+Это особенно удобно, если конфигурация хранится в `.env` файлах или других источниках.
+
+### Реализация с `TypeOrmModule.forRootAsync`
+
+Когда мы используем `forRootAsync`, параметры подключения создаются в асинхронном режиме — это полезно
+при использовании внешних конфигураций и позволяет гибко управлять настройками.
+
+**Пример кода:**
+```typescript
+import { Module } from '@nestjs/common';
+import { ConfigModule, ConfigService } from '@nestjs/config';
+import { TypeOrmModule } from '@nestjs/typeorm';
+
+import configuration from './configs/configuration';
+import { ArticlesModule } from './modules/articles/articles.module';
+import { CommentsModule } from './modules/comments/comments.module';
+import { HealthModule } from './modules/health/health.module';
+import { UsersModule } from './modules/users/users.module';
+
+@Module({
+  imports: [
+    ConfigModule.forRoot({
+      load: [configuration],
+      isGlobal: true,
+    }),
+    TypeOrmModule.forRootAsync({
+      useFactory: (configService: ConfigService) => {
+        return {
+          type: 'postgres',
+          host: configService.get<string>('DB_HOST'),
+          port: configService.get<number>('DB_PORT'),
+          username: configService.get<string>('DB_USERNAME'),
+          password: configService.get<string>('DB_PASSWORD'),
+          database: configService.get<string>('DB_NAME'),
+          entities: [],  // Укажем путь к Entity (сущностям) позже
+          synchronize: false,
+        };
+      },
+      inject: [ConfigService],
+    }),
+    ArticlesModule,
+    UsersModule,
+    CommentsModule,
+    HealthModule,
+  ],
+})
+export class AppModule {}
+```
+
+### Объяснение кода:
+
+- **useFactory:** Это функция, которая определяет настройки подключения. Мы передаём её в `TypeOrmModule.forRootAsync`.
+- **configService.get** — метод для извлечения конфигураций из `ConfigService`.
+Он подгружает данные из `env` файлов или других источников, определённых в конфигурационном модуле.
+
+### Важно:
+Для упрощения организации проекта и управления конфигурациями, базу данных и другие чувствительные настройки
+следует выносить в `.env` файлы. `ConfigService` в NestJS поможет легко получать эти значения,
+не импортируя `.env` напрямую в модули.
+
+---
+
+## Шаг 4: Создание Entity (сущностей) для базы данных
+
+Сущности (Entity) представляют собой классы, соответствующие структуре таблиц в базе данных.
+TypeORM использует классы сущностей, чтобы сопоставить их с таблицами и управлять данными.
+
+### Пример создания сущности `UserEntity`
+
+В папке `src/database/entities` создадим файл `user.entity.ts`, который будет содержать описание сущности `User`:
+
+```typescript
+import { Column, Entity, PrimaryGeneratedColumn } from 'typeorm';
+
+@Entity()  // Указываем, что этот класс — сущность для базы данных
+export class UserEntity {
+  @PrimaryGeneratedColumn()  // Автоматическая генерация значения ID
+  id: number;
+
+  @Column()  // Поле firstName, строковый тип
+  firstName: string;
+
+  @Column()  // Поле lastName, строковый тип
+  lastName: string;
+
+  @Column({ default: true })  // Поле isActive, логический тип, по умолчанию true
+  isActive: boolean;
+}
+```
+
+### На практике:
+- **@Entity** — декоратор, который указывает TypeORM, что этот класс должен использоваться как сущность.
+- **@PrimaryGeneratedColumn** — автоматически создаёт уникальный идентификатор для каждой записи.
+- **@Column** — указывает, что свойство станет столбцом таблицы. Можно добавить параметры,
+например, `default`, `nullable`, и другие.
+
+#### Важно:
+Чтобы приложение корректно распознало сущности, нужно добавить их в массив `entities` в конфигурации TypeORM.
+
+## Шаг 5: Указание пути к сущностям в TypeORM
+
+Чтобы не добавлять каждую сущность вручную, можно указать путь, по которому TypeORM будет автоматически
+находить файлы сущностей. Это упростит структуру, особенно в больших проектах.
+
+### Пример кода:
+
+```typescript
+import * as path from 'node:path';
+
+@Module({
+  imports: [
+    ConfigModule.forRoot({
+      load: [configuration],
+      isGlobal: true,
+    }),
+    TypeOrmModule.forRootAsync({
+      useFactory: (configService: ConfigService) => {
+        return {
+          type: 'postgres',
+          host: configService.get<string>('DB_HOST'),
+          port: configService.get<number>('DB_PORT'),
+          username: configService.get<string>('DB_USERNAME'),
+          password: configService.get<string>('DB_PASSWORD'),
+          database: configService.get<string>('DB_NAME'),
+          entities: [
+            path.join(
+              process.cwd(),
+              'dist', 'database', 'entities', '*.entity.js', // Путь до всех сущностей
+            ),
+          ],
+          synchronize: false,
+        };
+      },
+      inject: [ConfigService],
+    }),
+    ArticlesModule,
+    UsersModule,
+    CommentsModule,
+    HealthModule,
+  ],
+})
+export class AppModule {}
+```
+
+---
+
+## Шаг 6: Вынесение подключения базы данных в отдельный модуль
+
+Для поддержания структурированности кода создадим отдельный модуль `PostgresModule`,
+который будет отвечать только за подключение базы данных. Это позволит подключать его в `AppModule` и
+при необходимости использовать его в других частях приложения.
+
+### Пример создания `PostgresModule`
+
+В папке `src/modules/postgres` создадим файл `postgres.module.ts`:
+
+```typescript
+import * as path from 'node:path';
+
+import { Module } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { TypeOrmModule } from '@nestjs/typeorm';
+
+@Module({
+  imports: [
+    TypeOrmModule.forRootAsync({
+      useFactory: (configService: ConfigService) => {
+        return {
+          type: 'postgres',
+          host: configService.get<string>('DB_HOST'),
+          port: configService.get<number>('DB_PORT'),
+          username: configService.get<string>('DB_USERNAME'),
+          password: configService.get<string>('DB_PASSWORD'),
+          database: configService.get<string>('DB_NAME'),
+          entities: [
+            path.join(
+              process.cwd(),
+              'dist', 'database', 'entities', '*.entity.js',
+            ),
+          ],
+          synchronize: false,
+        };
+      },
+      inject: [ConfigService],
+    }),
+  ],
+})
+export class PostgresModule {}
+```
+
+### Подключение `PostgresModule` в `AppModule`
+
+Теперь подключим этот модуль в `AppModule`, избавив его от громоздкого кода настройки базы данных:
+
+```typescript
+import { Module } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
+
+import configuration from './configs/configuration';
+import { ArticlesModule } from './modules/articles/articles.module';
+import { CommentsModule } from './modules/comments/comments.module';
+import { HealthModule } from './modules/health/health.module';
+import { PostgresModule } from './modules/postgres/postgres.module';
+import { UsersModule } from './modules/users/users.module';
+
+@Module({
+  imports: [
+    ConfigModule.forRoot({
+      load: [configuration],
+      isGlobal: true,
+    }),
+    PostgresModule,  // Подключаем модуль базы данных
+    ArticlesModule,
+    UsersModule,
+    CommentsModule,
+    HealthModule,
+  ],
+})
+export class AppModule {}
+```
+
+---
+
+## Итог
+
+- Мы создали конфигурацию для подключения базы данных PostgreSQL в `AppModule` и вынесли её в отдельный
+модуль `PostgresModule`.
+- Научились асинхронно загружать параметры конфигурации для подключения к базе данных, используя `ConfigService`.
+- Рассмотрели создание и подключение сущностей, а также настройки для автоматического поиска файлов сущностей в проекте.
+
+**Рекомендации:** На следующем занятии можно будет рассмотреть использование миграций для версии изменений
+в структуре базы данных, а также основные CRUD операции с сущностями, чтобы реализовать полный цикл работы
+с базой данных в NestJS.
