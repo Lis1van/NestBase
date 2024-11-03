@@ -1,0 +1,403 @@
+## 1. Введение в миграции
+
+**Миграции** — это своего рода контроль версий для базы данных. Представьте их как сохранения в играх: они
+позволяют «сохранять» состояние структуры базы данных, чтобы в случае изменений вернуться назад или внести
+дополнительные корректировки. Миграции полезны на всех этапах разработки, а особенно в продакшн-среде,
+так как с их помощью можно сохранить данные пользователей, обновляя структуру базы данных.
+
+**Важно:**
+На начальных этапах разработки часто используют автоматическую синхронизацию, которая добавляет изменения
+в базу данных сразу после запуска сервера. Это настраивается через `synchronize: true` в конфигурации TypeORM.
+Однако в продакшн-среде синхронизация может вызвать потерю данных, так как она не хранит изменений.
+Поэтому в продакшн-среде важно полагаться на миграции.
+
+Пример настройки без использования синхронизации:
+
+```typescript
+import * as path from 'node:path';
+import { Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { TypeOrmModuleOptions, TypeOrmOptionsFactory } from '@nestjs/typeorm';
+
+import { ConfigType, PostgresConfig } from '../../configs/config.type';
+
+@Injectable()
+export class PostgresService implements TypeOrmOptionsFactory {
+  constructor(private readonly configService: ConfigService<ConfigType>) {}
+
+  createTypeOrmOptions(): TypeOrmModuleOptions {
+    const postgresConfig = this.configService.get<PostgresConfig>('postgres');
+    return {
+      type: 'postgres',
+      host: postgresConfig.host,
+      port: postgresConfig.port,
+      username: postgresConfig.username,
+      password: postgresConfig.password,
+      database: postgresConfig.database,
+      entities: [
+        path.join(process.cwd(), 'dist', 'database', 'entities', '*.entity.js'),
+      ],
+      synchronize: false, // Отключено для использования миграций
+    };
+  }
+}
+```
+
+Ссылки на документацию TypeORM по [миграциям](https://typeorm.io/migrations)
+и [синхронизации](https://typeorm.io/connection-options) помогут вам более подробно ознакомиться с этими настройками.
+
+---
+
+## 2. Настройка миграций в NestJS
+
+### 2.1 Создание сущностей (Entities)
+
+**Сущности (Entities)** — это классы, которые представляют таблицы в базе данных.
+Например, сущность `User` будет представлять таблицу пользователей.
+Для создания сущности используется декоратор `@Entity()`, а поля помечаются с помощью `@Column()`.
+
+Пример кода для сущности пользователя:
+
+```typescript
+import { Column, Entity, PrimaryGeneratedColumn } from 'typeorm';
+
+@Entity('user') // Имя таблицы
+export class UserEntity {
+  @PrimaryGeneratedColumn('uuid') // Первичный ключ с автоматической генерацией UUID
+  id: string;
+
+  @Column('text') // Поле 'name' типа text
+  name: string;
+
+  @Column('text', { unique: true }) // Поле 'email', уникальное в пределах таблицы
+  email: string;
+
+  @Column('text') // Поле 'password' для хранения паролей
+  password: string;
+}
+```
+
+**Комментарий:**
+- `@PrimaryGeneratedColumn('uuid')` — это поле автоматически генерируется как UUID и служит уникальным
+идентификатором для каждой записи.
+- `@Column('text')` — указывает, что поле `name`, `email`, и `password` будут иметь тип `text` в базе данных.
+
+*Что еще можно добавлять внутри `@Column()`:*
+  - **`unique: true`** — делает поле уникальным в пределах таблицы.
+  - **`nullable: true`** — позволяет полю быть пустым.
+  - **`default: значение`** — задает значение по умолчанию для столбца.
+
+### 2.2 Конфигурация TypeORM и миграций
+
+Теперь, когда у нас есть сущность, создадим конфигурацию для подключения базы данных и управления миграциями.
+
+#### Шаг 1: Установка `dotenv`
+
+Чтобы использовать файл `.env` для конфигурации, установим `dotenv`:
+
+```bash
+npm i dotenv
+```
+
+NestJS автоматически подгружает `.env` из корневой папки проекта при запуске. Чтобы управлять миграциями,
+создадим файл конфигурации `ormconfig.ts` в корневой папке проекта:
+
+```typescript
+import * as path from 'node:path';
+import * as dotenv from 'dotenv';
+import { DataSource } from 'typeorm';
+
+import getConfig from './src/configs/config';
+
+dotenv.config({ path: './environments/local.env' });
+
+const postgresConfig = getConfig().postgres;
+
+export default new DataSource({
+  type: 'postgres',
+  host: postgresConfig.host,
+  port: postgresConfig.port,
+  username: postgresConfig.username,
+  password: postgresConfig.password,
+  database: postgresConfig.database,
+  entities: [
+    path.join(process.cwd(), 'src', 'database', 'entities', '*.entity.ts'),
+  ],
+  synchronize: false,
+});
+```
+
+**Описание файла**
+- **`DataSource`**: основной класс для работы с TypeORM, включающий настройки подключения и миграций.
+- **`dotenv.config()`**: загрузка переменных окружения из файла `.env`.
+
+---
+
+### 2.3 Настройка скриптов для управления миграциями
+
+После настройки конфигурационного файла `ormconfig.ts` добавим в `package.json` набор скриптов для создания,
+генерации, выполнения и отката миграций. Эти скрипты помогут управлять миграциями через терминал.
+
+**Добавим следующие скрипты в `package.json`:**
+
+```json
+{
+  "scripts": {
+    "typeorm": "typeorm-ts-node-commonjs --dataSource ./ormconfig.ts",
+    "migration:create": "cross-var npm run typeorm -- migration:create ./src/database/migrations/$npm_config_name",
+    "migration:generate": "cross-var npm run typeorm -- migration:generate ./src/database/migrations/$npm_config_name",
+    "migration:revert": "npm run typeorm -- migration:revert",
+    "migration:run": "npm run typeorm -- migration:run"
+  }
+}
+```
+
+**Описание скриптов:**
+- **`migration:create`** — создает новую миграцию. Здесь параметр `$npm_config_name` задает имя миграции.
+- **`migration:generate`** — генерирует миграцию на основе изменений в сущностях.
+Полезно, если вы обновили структуру, и TypeORM автоматически зафиксирует изменения.
+- **`migration:run`** — применяет все имеющиеся миграции к базе данных.
+- **`migration:revert`** — откатывает последнюю выполненную миграцию.
+
+**Важно:**
+Для работы скриптов потребуется установить пакет `cross-var`, который позволяет использовать переменные
+окружения независимо от ОС. Установим `cross-var`:
+
+```bash
+npm i cross-var
+```
+
+### 3. Генерация миграций
+
+После настройки скриптов и конфигурации теперь можем генерировать миграции.
+Например, чтобы создать базовую миграцию с именем `base_migration`, запустим:
+
+```bash
+npm run migration:generate --name=base_migration
+```
+
+Команда создаст файл миграции в папке `src/database/migrations` и будет выглядеть примерно так:
+
+```typescript
+import { MigrationInterface, QueryRunner } from "typeorm";
+
+export class BaseMigration1730658644181 implements MigrationInterface {
+    name = 'BaseMigration1730658644181'
+
+    public async up(queryRunner: QueryRunner): Promise<void> {
+        await queryRunner.query(`CREATE TABLE "users" ("id" SERIAL NOT NULL, "firstName" character varying NOT NULL, "lastName" character varying NOT NULL, "isActive" boolean NOT NULL, CONSTRAINT "PK_a3ffb1c0c8416b9fc6f907b7433" PRIMARY KEY ("id"))`);
+    }
+
+    public async down(queryRunner: QueryRunner): Promise<void> {
+        await queryRunner.query(`DROP TABLE "users"`);
+    }
+}
+```
+
+**Описание кода:**
+- **`MigrationInterface`** — интерфейс для всех миграций в TypeORM.
+- **Метод `up`** — содержит инструкции для выполнения миграции.
+В данном случае он создает таблицу `users` с полями `id`, `firstName`, `lastName` и `isActive`.
+- **Метод `down`** — позволяет откатить миграцию, удаляя таблицу `users`.
+
+### 4. Запуск миграций
+
+Для применения изменений в базе данных используем команду `migration:run`:
+
+```bash
+npm run migration:run
+```
+
+Эта команда выполнит все миграции и внесет изменения в базу данных.
+
+**Важно:**
+Перед запуском миграций убедитесь, что в файле `ormconfig.ts` добавлен путь к папке миграций. Обновим конфигурацию:
+
+```typescript
+import * as path from 'node:path';
+import * as dotenv from 'dotenv';
+import { DataSource } from 'typeorm';
+
+import getConfig from './src/configs/config';
+
+dotenv.config({ path: './environments/local.env' });
+
+const postgresConfig = getConfig().postgres;
+
+export default new DataSource({
+  type: 'postgres',
+  host: postgresConfig.host,
+  port: postgresConfig.port,
+  username: postgresConfig.username,
+  password: postgresConfig.password,
+  database: postgresConfig.database,
+  entities: [
+    path.join(process.cwd(), 'src', 'database', 'entities', '*.entity.ts'),
+  ],
+  migrations: [
+    path.join(process.cwd(), 'src', 'database', 'migrations', '*.ts'),
+  ],
+  synchronize: false,
+});
+```
+
+**Комментарий:**
+- Параметр `migrations` указывает путь к файлам миграций, где `*.ts` обозначает,
+что TypeORM будет использовать файлы TypeScript.
+
+### Работа с миграциями
+
+#### Создание новой миграции
+
+Миграция создается командой `migration:generate` и автоматически отслеживает изменения в сущностях.
+Например, если вы добавили новое поле в сущность `User`, TypeORM зафиксирует это изменение при следующем
+запуске `migration:generate`.
+
+#### Откат миграций
+
+Чтобы отменить последнюю миграцию, используем команду `migration:revert`:
+
+```bash
+npm run migration:revert
+```
+
+**Комментарий:**
+Откат — полезная команда в процессе разработки и тестирования, позволяющая быстро вернуть базу данных в
+прежнее состояние при ошибке в миграции или для отката последних изменений.
+
+---
+
+### 5. Подключение Redis (RedisModule)
+
+Redis часто используется для хранения кэша и временных данных, например, для обработки сессий.
+Для подключения Redis установим пакет `ioredis`:
+
+```bash
+npm i ioredis
+```
+
+Теперь создадим модуль `redis.module.ts` для интеграции Redis в проект:
+
+```typescript
+import { Module } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import Redis from 'ioredis';
+
+import { ConfigType, RedisConfig } from '../../configs/config.type';
+
+@Module({
+  providers: [
+    {
+      provide: 'REDIS',
+      useFactory: (configService: ConfigService<ConfigType>) => {
+        const config = configService.get<RedisConfig>('redis');
+        return new Redis({
+          port: config.port,
+          host: config.host,
+          password: config.password,
+        });
+      },
+      inject: [ConfigService],
+    },
+  ],
+})
+export class RedisModule {}
+```
+
+**Описание кода:**
+- **`RedisModule`** — модуль для подключения Redis к проекту.
+- **`ConfigService`** — позволяет получить параметры Redis из конфигурации.
+- **`Redis`** — экземпляр Redis, инициализируется с настройками из `RedisConfig`.
+
+### 6. Обработка ошибок при миграциях
+
+Если при выполнении миграции возникает ошибка, и база данных не обновилась, можно откатить миграцию
+с помощью `migration:revert`, а затем исправить код и повторить запуск. Это важный шаг при разработке и тестировании,
+так как позволяет избежать потерь данных или несоответствий в структуре базы данных.
+
+### 7. Транзакции в миграциях
+
+TypeORM по умолчанию оборачивает миграции в транзакции, что значит, если одна из миграций завершится ошибкой,
+все изменения будут отменены, и база данных вернется в прежнее состояние. Это помогает поддерживать целостность
+данных и позволяет безопасно управлять миграциями.
+
+### Заключение
+
+Миграции — это мощный инструмент для управления структурой базы данных в приложениях NestJS с TypeORM.
+Они обеспечивают надежные и контролируемые изменения схемы, что важно для всех этапов разработки.
+
+---
+
+Продолжить в следующем уроке с более глубоким рассмотрением транзакций и сложных аспектов работы с миграциями?
+
+### 8. Использование транзакций в миграциях
+
+Как уже упоминалось, TypeORM по умолчанию оборачивает каждую миграцию в транзакцию.
+Это позволяет откатить все изменения, если какая-либо из операций в миграции завершится ошибкой.
+Однако бывают случаи, когда нам нужно управлять транзакциями вручную, например, при сложных обновлениях базы данных,
+где требуется более гибкое управление процессом.
+
+**Пример ручного использования транзакций в миграции:**
+
+```typescript
+import { MigrationInterface, QueryRunner } from "typeorm";
+
+export class ComplexMigration1689345678910 implements MigrationInterface {
+    public async up(queryRunner: QueryRunner): Promise<void> {
+        // Начинаем транзакцию
+        await queryRunner.startTransaction();
+
+        try {
+            // Выполняем первый запрос
+            await queryRunner.query(`ALTER TABLE "users" ADD COLUMN "age" integer`);
+
+            // Выполняем второй запрос
+            await queryRunner.query(`UPDATE "users" SET "age" = 18 WHERE "age" IS NULL`);
+
+            // Подтверждаем транзакцию, если все запросы успешны
+            await queryRunner.commitTransaction();
+        } catch (error) {
+            // Откатываем транзакцию при ошибке
+            await queryRunner.rollbackTransaction();
+            throw error; // Пробрасываем ошибку для логирования
+        } finally {
+            // Завершаем работу с транзакцией
+            await queryRunner.release();
+        }
+    }
+
+    public async down(queryRunner: QueryRunner): Promise<void> {
+        // Откат изменений
+        await queryRunner.query(`ALTER TABLE "users" DROP COLUMN "age"`);
+    }
+}
+```
+
+**Описание:**
+- **`startTransaction()`** — начинает транзакцию, после чего все изменения будут зафиксированы или отменены
+в зависимости от успешности выполнения запросов.
+- **`commitTransaction()`** — фиксирует изменения в базе данных.
+- **`rollbackTransaction()`** — отменяет изменения, если возникает ошибка.
+- **`release()`** — завершает работу с транзакцией, очищая ресурсы.
+
+**На практике:**
+Такие транзакции полезны при сложных миграциях, где требуется выполнить несколько взаимосвязанных операций.
+Например, добавление новой таблицы, перемещение данных из старой таблицы в новую и удаление старой таблицы.
+Транзакции помогут гарантировать, что-либо все изменения будут успешны, либо ни одно из них не будет применено,
+если произойдет ошибка.
+
+### 9. Заключение: Основные принципы работы с миграциями
+
+Миграции — это инструмент управления базой данных, позволяющий надежно отслеживать и обновлять структуру
+базы данных в приложениях, особенно в продакшене. Благодаря TypeORM и NestJS, миграции можно интегрировать
+и управлять ими достаточно легко. Главное помнить:
+
+- **Синхронизация (`synchronize: false`)** должна быть отключена на продакшене. Используйте миграции для
+управляемых обновлений структуры.
+- **Транзакции** оборачивают все миграции по умолчанию, что помогает избежать неполных изменений в случае ошибки.
+- **Откат и повторное применение миграций** — важные инструменты для тестирования и отладки.
+
+### Дополнительные ресурсы
+
+- [Документация TypeORM по миграциям](https://typeorm.io/migrations)
+- [Документация по транзакциям в TypeORM](https://typeorm.io/transactions)
