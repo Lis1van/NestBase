@@ -1,0 +1,215 @@
+### Обработка ошибок Exception Filters в NestJS: Расширенное руководство
+
+#### Введение в фильтры исключений в NestJS
+
+NestJS предоставляет встроенную систему обработки исключений, называемую **Exception Filters**.
+Она позволяет управлять ошибками, которые могут возникать при выполнении запросов к приложению.
+По умолчанию, при возникновении исключения глобальный фильтр обрабатывает ошибку и отправляет соответствующий
+ответ клиенту. При необходимости, разработчики могут создавать свои **кастомные фильтры исключений** для
+персонализированной обработки ошибок.
+
+**Важно:** Exception Filters дают возможность детально управлять исключениями, определяя,
+как именно будут обрабатываться определенные типы ошибок в вашем приложении.
+
+##### Что такое фильтры исключений?
+
+Фильтры исключений в NestJS можно представить как специальные «перехватчики ошибок»,
+которые реагируют на определённые ошибки, происходящие в приложении.
+Их можно настроить для обработки **глобально** (на уровне всего приложения),
+а также **локально** (для отдельных контроллеров или маршрутов).
+
+---
+
+#### 1. Создание фильтра исключений
+
+Чтобы создать фильтр исключений в NestJS, следуйте шагам ниже:
+
+1. Создайте в проекте папку `http` для хранения всех элементов, связанных с HTTP-обработкой,
+в директории `src/common`.
+2. В папке `http` создайте файл `global-exception.filter.ts` — в нем будет описан наш глобальный фильтр исключений:
+
+```typescript
+import { ArgumentsHost, Catch, ExceptionFilter, HttpException } from '@nestjs/common';
+import { Request, Response } from 'express';
+
+// Декоратор @Catch() говорит NestJS, что этот класс является фильтром исключений
+@Catch()
+export class GlobalExceptionFilter implements ExceptionFilter {
+  // Метод catch перехватывает исключение и настраивает его обработку
+  catch(exception: HttpException, host: ArgumentsHost) {
+    // Переключаемся на HTTP контекст для работы с запросами и ответами
+    const ctx = host.switchToHttp();
+    const response = ctx.getResponse<Response>();
+    const request = ctx.getRequest<Request>();
+    const status = exception.getStatus(); // Определяем статус ошибки
+
+    // Возвращаем стандартный ответ клиенту
+    response.status(status).json({
+      statusCode: status,
+      timestamp: new Date().toISOString(),
+      path: request.url,
+    });
+  }
+}
+```
+
+**Объяснение кода**:
+- Класс `GlobalExceptionFilter` реализует метод `catch`, который обрабатывает все перехваченные исключения.
+- Метод `getStatus()` возвращает HTTP-статус ошибки, который используется для формирования ответа.
+- Метод `json()` отправляет структурированный ответ клиенту, включая информацию о статусе ошибки,
+пути запроса и времени её возникновения.
+
+---
+
+#### 2. Подключение фильтра к приложению
+
+Существует несколько способов регистрации фильтра исключений в приложении NestJS.
+
+##### 2.1 Глобальная регистрация в main.ts
+
+Чтобы фильтр обрабатывал все исключения во всём приложении, его можно подключить глобально в файле `main.ts`:
+
+```typescript
+import { Logger, ValidationPipe } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import { NestFactory } from '@nestjs/core';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import * as dotenv from 'dotenv';
+
+import { AppModule } from './app.module';
+import { GlobalExceptionFilter } from './common/http/global-exception.filter';
+import { AppConfig } from './configs/config.type';
+
+dotenv.config({ path: './environments/local.env' });
+
+async function bootstrap() {
+  const app = await NestFactory.create(AppModule);
+
+  // Настройка Swagger для документации API
+  const config = new DocumentBuilder()
+    .setTitle('Demo example')
+    .setDescription('The demo API description')
+    .setVersion('1.0.0')
+    .addBearerAuth({
+      in: 'header',
+      type: 'http',
+      scheme: 'bearer',
+      bearerFormat: 'JWT',
+    })
+    .build();
+
+  const documentFactory = () => SwaggerModule.createDocument(app, config);
+  SwaggerModule.setup('api', app, documentFactory, {
+    swaggerOptions: {
+      docExpansion: 'list',
+      defaultModelsExpandDepth: 1,
+      persistAuthorization: true,
+    },
+  });
+
+  const configService = app.get(ConfigService);
+  const appConfig = configService.get<AppConfig>('app');
+
+  // Регистрация фильтра как глобального ExceptionFilter
+  app.useGlobalFilters(new GlobalExceptionFilter());
+  app.useGlobalPipes(
+    new ValidationPipe({
+      whitelist: true,
+      forbidNonWhitelisted: true,
+      transform: true,
+    }),
+  );
+
+  await app.listen(appConfig.port, () => {
+    const url = `http://${appConfig.host}:${appConfig.port}`;
+    Logger.log(`listening on ${url});`);
+    Logger.log(`Swagger server listening on ${url}/api`);
+  });
+}
+bootstrap();
+```
+
+---
+
+##### 2.2 Подключение в app.module.ts
+
+Также вы можете подключить фильтр исключений в `app.module.ts`:
+
+```typescript
+import { Module } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
+import { APP_FILTER } from '@nestjs/core';
+
+import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
+import configuration from './configs/configuration';
+import { ArticlesModule } from './modules/articles/articles.module';
+import { CommentsModule } from './modules/comments/comments.module';
+import { HealthModule } from './modules/health/health.module';
+import { PostgresModule } from './modules/postgres/postgres.module';
+import { RedisModule } from './modules/redis/redis.module';
+import { UsersModule } from './modules/users/users.module';
+
+@Module({
+  imports: [
+    ConfigModule.forRoot({
+      load: [configuration],
+      isGlobal: true,
+    }),
+    PostgresModule,
+    ArticlesModule,
+    UsersModule,
+    CommentsModule,
+    HealthModule,
+    PostgresModule,
+    RedisModule,
+  ],
+  providers: [
+    {
+      provide: APP_FILTER,
+      useClass: GlobalExceptionFilter, // Указываем фильтр как глобальный
+    },
+  ],
+})
+export class AppModule {}
+```
+
+**Важно**: Регистрация глобальных Exception Filters таким образом позволяет избежать необходимости
+повторного подключения фильтра в каждом контроллере.
+
+---
+
+### 3. Логирование ошибок
+
+Добавление логирования позволяет увидеть детали исключения, включая маршрут, метод и стек ошибки,
+что облегчает отладку.
+
+```typescript
+import { ArgumentsHost, Catch, ExceptionFilter, HttpException, Logger } from '@nestjs/common';
+import { Request, Response } from 'express';
+
+@Catch()
+export class GlobalExceptionFilter implements ExceptionFilter {
+  catch(exception: HttpException, host: ArgumentsHost) {
+    const ctx = host.switchToHttp();
+    const response = ctx.getResponse<Response>();
+    const request = ctx.getRequest<Request>();
+    const status = exception.getStatus();
+    const message = exception.message || 'An unexpected error occurred.';
+
+    Logger.error(message, exception.stack, `${request.method} ${request.url}`);
+
+    response.status(status).json({
+      statusCode: status,
+      message,
+      timestamp: new Date().toISOString(),
+      path: request.url,
+    });
+  }
+}
+```
+
+---
+
+### Итог
+
+Фильтры исключений предоставляют удобный способ управления ошибками в NestJS.
