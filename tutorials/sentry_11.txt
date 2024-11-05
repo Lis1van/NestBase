@@ -1,0 +1,323 @@
+### Подключение Sentry к проекту NestJS
+
+Для начала настроим интеграцию Sentry — сервиса, предназначенного для отслеживания и управления ошибками в приложении,
+позволяя не только видеть каждую возникающую проблему, но и получать дополнительную информацию
+(например, данные запроса, контекстные параметры и стек вызовов).
+Благодаря этому значительно упрощается диагностика и устранение проблем, что особенно полезно в крупных проектах.
+
+### 1. Регистрация и создание проекта в Sentry
+
+1. **Зарегистрируйтесь** на платформе Sentry, перейдя по [ссылке](https://sentry.io/welcome/).
+2. **Создайте новый проект**:
+   - Войдите в свою учетную запись и выберите опцию создания нового проекта.
+   - Придумайте уникальное имя для проекта.
+   - Выберите платформу, на которой вы разрабатываете (например, “Node.js” или “JavaScript”).
+3. После создания проекта вы получите **DSN (Data Source Name)** — уникальный идентификатор,
+который используется для настройки и связи проекта с Sentry. Скопируйте его, так как он понадобится при настройке в коде.
+
+> **Важно:** DSN нужно хранить в безопасном месте, чтобы избежать утечек и несанкционированного доступа к данным об ошибках.
+
+### 2. Установка зависимостей
+
+Для подключения Sentry к NestJS потребуется установить необходимые пакеты:
+```bash
+npm install @sentry/nestjs @sentry/profiling-node --save
+```
+
+- **@sentry/nestjs** — основной модуль для интеграции с NestJS.
+- **@sentry/profiling-node** — модуль для профилирования, позволяющий фиксировать производительность
+и создавать профили выполнения функций (полезно при анализе производительности).
+
+### 3. Настройка Sentry в проекте
+
+#### Шаг 1: Инициализация Sentry
+
+Создайте файл `instrument.ts` в папке `src/common/http` и настройте инициализацию Sentry:
+```typescript
+import * as Sentry from '@sentry/nestjs';
+import { nodeProfilingIntegration } from '@sentry/profiling-node';
+
+Sentry.init({
+  dsn: 'https://<YOUR_DSN_HERE>@o4508161883701248.ingest.de.sentry.io/4508161888419920', // ваш DSN
+  integrations: [nodeProfilingIntegration()],
+  tracesSampleRate: 1.0, // Фиксирует 100% транзакций (можно настроить ниже для частичной выборки)
+  profilesSampleRate: 1.0, // Фиксирует 100% профилей (зависит от tracesSampleRate)
+});
+```
+
+> **На практике:** В `dsn` нужно вставить тот DSN, который вы получили при создании проекта в Sentry.
+> Настройки `tracesSampleRate` и `profilesSampleRate` определяют частоту фиксации событий.
+Показатель `1.0` означает 100%, `0.5` — 50%, и т.д. Подобная настройка помогает оптимизировать объем данных,
+отправляемых в Sentry, особенно если приложение обрабатывает большой трафик.
+
+#### Шаг 2: Подключение `instrument.ts` в main.ts
+
+Теперь, когда мы настроили `instrument.ts`, нужно подключить его в основном файле приложения `main.ts`.
+Это обеспечит активацию Sentry сразу при запуске приложения.
+В начале `main.ts` добавьте импорт:
+
+```typescript
+import './common/http/instrument';
+```
+
+> **Важно:** Этот импорт должен быть добавлен до основной логики в `bootstrap()`,
+так как это гарантирует инициализацию Sentry до начала выполнения кода.
+
+#### Шаг 3: Настройка модуля Sentry в `app.module.ts`
+
+Для удобного доступа и централизованной интеграции, добавим **SentryModule** как глобальный модуль в `app.module.ts`.
+Это упростит использование Sentry в разных частях приложения:
+
+```typescript
+import { Module } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
+import { SentryModule } from '@sentry/nestjs/setup';
+
+import configuration from './configs/config';
+import { AuthModule } from './modules/auth/auth.module';
+import { HealthModule } from './modules/health/health.module';
+import { PostgresModule } from './modules/postgres/postgres.module';
+import { PostgresService } from './modules/postgres/postgres.service';
+import { UsersModule } from './modules/users/users.module';
+
+@Module({
+  imports: [
+    SentryModule.forRoot(),
+    ConfigModule.forRoot({
+      load: [configuration],
+      isGlobal: true,
+    }),
+    UsersModule,
+    HealthModule,
+    AuthModule,
+    PostgresModule,
+  ],
+  controllers: [],
+  providers: [PostgresService],
+})
+export class AppModule {}
+```
+
+> **На практике:** Это сделает **SentryModule** доступным во всем приложении,
+и вы сможете легко использовать его в нужных модулях и сервисах для логирования и обработки ошибок.
+
+#### Шаг 4: Глобальный фильтр исключений с Sentry
+
+Фильтры исключений (exception filters) в NestJS — это мощный инструмент для обработки ошибок.
+Чтобы Sentry автоматически фиксировал ошибки, добавим его в наш глобальный фильтр исключений.
+
+Создайте или обновите существующий фильтр исключений `global-exception.filter.ts`:
+```typescript
+import { ArgumentsHost, Catch, ExceptionFilter, HttpException, Logger } from '@nestjs/common';
+import { Request, Response } from 'express';
+import { WithSentry } from '@sentry/nestjs';
+
+@Catch()
+export class GlobalExceptionFilter implements ExceptionFilter {
+  @WithSentry()
+  catch(exception: HttpException, host: ArgumentsHost) {
+    const ctx = host.switchToHttp();
+    const response = ctx.getResponse<Response>();
+    const request = ctx.getRequest<Request>();
+    const status = exception.getStatus();
+    const message = exception.message || 'An unexpected error occurred.';
+
+    Logger.error(`${message}`, exception.stack, `${request.method} ${request.url}`);
+    response.status(status).json({
+      statusCode: status,
+      message,
+      timestamp: new Date().toISOString(),
+      path: request.url,
+    });
+  }
+}
+```
+
+1. **Декоратор `@WithSentry()`** подключает Sentry ко всем исключениям, которые проходят через этот фильтр.
+2. **Логирование ошибок с помощью `Logger.error`** помогает зафиксировать не только сообщение об ошибке,
+но и метод запроса, URL и стек вызовов.
+
+> **Совет:** Используйте этот фильтр для глобальной обработки ошибок и детальной записи сведений о них.
+Это гарантирует, что даже при неожиданной ошибке приложение вернет согласованный ответ.
+
+### Проверка работоспособности
+
+Для тестирования можно добавить маршрут с преднамеренной ошибкой. Например, в `user.controller.ts`:
+```typescript
+@Get('/debug-sentry')
+getError() {
+  throw new Error('My first Sentry error!');
+}
+```
+
+Этот маршрут генерирует ошибку, и при ее вызове Sentry должен зафиксировать событие.
+Проверить его можно, открыв панель проекта в Sentry и убедившись, что ошибка зарегистрировалась в системе.
+
+### Заключение
+
+Настройка глобального фильтра исключений в NestJS, расширенного Sentry, помогает упростить обработку ошибок
+и улучшить диагностику.  Фильтры позволяют автоматически фиксировать любые ошибки, происходящие в приложении,
+и дают разработчику доступ ко всем необходимым данным для их устранения. Sentry в качестве инструмента
+для централизованного мониторинга облегчает процесс анализа и устраняет проблему потери информации о
+произошедших ошибках.
+
+> **Примечание:** В проекте может быть несколько фильтров исключений, каждый из которых может обрабатывать
+определенные типы ошибок или их категории.
+
+Подключение Sentry через отдельный глобальный модуль предоставляет еще одну полезную архитектурную структуру,
+позволяющую организовать обработку логов централизованно и гибко. Такой подход упрощает управление логированием
+для различных уровней логов, изолирует Sentry в отдельном модуле и позволяет при необходимости легко адаптировать
+или заменять Sentry на другую систему логирования. Давайте разберем детали этого подхода.
+
+### Подключение Sentry с использованием глобального модуля Logger
+
+1. **Создание глобального модуля Logger:**
+
+   В `src/modules/logger` создаем модуль `LoggerModule` и сервис `LoggerService`, чтобы обрабатывать логи,
+   используя либо консольное логирование (локально), либо отправляя данные в Sentry (в других окружениях).
+
+   **logger.module.ts**
+   ```typescript
+   import { Global, Module } from '@nestjs/common';
+   import { LoggerService } from './logger.service';
+
+   @Global()
+   @Module({
+     controllers: [],
+     providers: [LoggerService],
+     exports: [LoggerService],
+   })
+   export class LoggerModule {}
+   ```
+
+   Модуль `LoggerModule` объявляется глобальным через декоратор `@Global()`, что позволяет использовать его
+    в любом месте приложения без необходимости повторного импорта в каждом модуле.
+
+2. **Настройка LoggerService для работы с Sentry:**
+
+   **logger.service.ts**
+   ```typescript
+   import { Injectable, Logger } from '@nestjs/common';
+   import { ConfigService } from '@nestjs/config';
+   import * as Sentry from '@sentry/nestjs';
+   import { nodeProfilingIntegration } from '@sentry/profiling-node';
+
+   import { ConfigType, SentryConfig } from '../../configs/config.type';
+
+   @Injectable()
+   export class LoggerService {
+     private readonly isLocal: boolean;
+     private readonly logger = new Logger();
+
+     constructor(private readonly configService: ConfigService<ConfigType>) {
+       const sentryConfig = this.configService.get<SentryConfig>('sentry');
+       this.isLocal = sentryConfig.env === 'local';
+
+       Sentry.init({
+         dsn: sentryConfig.dsn,
+         integrations: [nodeProfilingIntegration()],
+         tracesSampleRate: 1.0,
+         debug: sentryConfig.debug,
+         profilesSampleRate: 1.0,
+       });
+     }
+
+     public log(message: string): void {
+       if (this.isLocal) {
+         this.logger.log(message);
+       } else {
+         Sentry.captureMessage(message, 'log');
+       }
+     }
+
+     public info(message: string): void {
+       if (this.isLocal) {
+         this.logger.log(message);
+       } else {
+         Sentry.captureMessage(message, 'info');
+       }
+     }
+
+     public warn(message: string): void {
+       if (this.isLocal) {
+         this.logger.warn(message);
+       } else {
+         Sentry.captureMessage(message, 'warning');
+       }
+     }
+
+     public error(error: any): void {
+       if (this.isLocal) {
+         this.logger.error(error, error.stack);
+       } else {
+         Sentry.captureException(error, { level: 'error' });
+       }
+     }
+   }
+   ```
+
+   **Объяснение кода:**
+   - **Конфигурация:** Используем `ConfigService` для получения настроек из конфигурационного файла
+   (например, `dsn`, `env`, `debug`).
+   - **Локальное логирование:** Если приложение работает в окружении `local`, ошибки и сообщения логируются
+   только в консоль с помощью стандартного `Logger`.
+   - **Логирование через Sentry:** В других окружениях используется `Sentry.captureMessage()` для отправки
+   логов и `Sentry.captureException()` для обработки ошибок.
+
+3. **Использование LoggerService в глобальном фильтре исключений:**
+
+   Настроим `GlobalExceptionFilter` для обработки всех необработанных исключений и передачи их в Sentry
+   через `LoggerService`.
+
+   **global-exception.filter.ts**
+   ```typescript
+   import { ArgumentsHost, Catch, ExceptionFilter } from '@nestjs/common';
+   import { Request, Response } from 'express';
+   import { LoggerService } from '../../modules/logger/logger.service';
+
+   @Catch()
+   export class GlobalExceptionFilter implements ExceptionFilter {
+     constructor(private readonly logger: LoggerService) {}
+
+     catch(exception: any, host: ArgumentsHost) {
+       const ctx = host.switchToHttp();
+       const response = ctx.getResponse<Response>();
+       const request = ctx.getRequest<Request>();
+       const status = exception.getStatus ? exception.getStatus() : 500;
+
+       this.logger.error(exception);  // Логирование через LoggerService
+
+       response.status(status).json({
+         statusCode: status,
+         timestamp: new Date().toISOString(),
+         path: request.url,
+       });
+     }
+   }
+   ```
+
+   **Объяснение:** Метод `this.logger.error(exception);` в фильтре передает всю информацию об ошибке
+   в `LoggerService`, который затем обрабатывает ее в зависимости от окружения.
+
+4. **Тестирование**
+
+   Чтобы проверить работу логирования, добавьте преднамеренную ошибку, например, в `user.service.ts`:
+
+   ```typescript
+   import { Injectable } from '@nestjs/common';
+
+   @Injectable()
+   export class UsersService {
+     public async create() {
+       throw new Error('Test Sentry error'); // Искусственная ошибка для проверки
+     }
+   }
+   ```
+
+   Эта ошибка автоматически обработается в `GlobalExceptionFilter`, а данные об ошибке будут отправлены
+   в Sentry через `LoggerService`.
+
+### Заключение
+
+С помощью такого подхода мы создали универсальный `LoggerModule`, который может управлять логированием в
+разных окружениях, отправляя данные в Sentry, и использоваться глобально.

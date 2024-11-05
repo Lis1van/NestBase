@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { ForbiddenException, Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 
 import { AppConfig, ConfigType } from '../../../configs/config.type';
@@ -8,11 +8,10 @@ import { UserResDto } from '../models/dto/res/user.res.dto';
 
 @Injectable()
 export class UsersService {
-  constructor(private readonly configService: ConfigService<ConfigType>) {
-    // Constructor here
-  }
+  constructor(private readonly configService: ConfigService<ConfigType>) {}
   public async create(createUserDto: CreateUserReqDto): Promise<UserResDto> {
     const appConfig = this.configService.get<AppConfig>('postgres');
+    throw new ForbiddenException('sdfg');
     console.log(appConfig);
     return {} as UserResDto;
   }
