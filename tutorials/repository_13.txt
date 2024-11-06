@@ -1,0 +1,155 @@
+### Руководство по созданию и использованию кастомных репозиториев в NestJS с TypeORM
+
+---
+
+## Введение
+
+В предыдущем материале мы познакомились с реляционными связями в базе данных с использованием TypeORM.
+Теперь, углубившись в управление данными, рассмотрим, как создавать и использовать кастомные репозитории.
+Кастомные репозитории нужны для выполнения специфических запросов или управления сложной логикой,
+которой не хватает в стандартных методах TypeORM.
+
+## Что такое кастомные репозитории и зачем они нужны?
+
+По умолчанию TypeORM предоставляет методы для базовых операций CRUD (создание, чтение, обновление, удаление).
+Однако в реальном приложении может потребоваться больше возможностей:
+- **Сложные запросы.** Например, получение только активных пользователей или выборка записей по более сложным критериям.
+- **Бизнес-логика.** Часто требуется логика, завязанная на уникальные требования бизнеса, которую лучше реализовать
+в отдельном репозитории.
+
+### Важно:
+> **Кастомный репозиторий** — это расширение стандартного репозитория TypeORM. Он позволяет добавить уникальные
+функции для работы с сущностями в проекте.
+
+---
+
+## Инжекция зависимостей и создание репозиториев
+
+### 1. Инжекция `DataSource` и `EntityManager`
+
+В NestJS и TypeORM управление базой данных выполняется через `DataSource` и `EntityManager`.
+
+- **`DataSource`** — объект, представляющий источник данных и используемый для создания соединения с базой.
+- **`EntityManager`** — объект, который позволяет управлять сущностями и выполнять запросы к базе данных.
+
+#### Пример создания кастомного репозитория
+
+Чтобы реализовать кастомный репозиторий, расширим стандартный `Repository` для определенной сущности.
+Например, создадим репозиторий для работы с `User`-сущностью:
+
+```typescript
+import { Injectable } from '@nestjs/common';
+import { DataSource, Repository } from 'typeorm';
+import { UserEntity } from '../../../database/entities/user.entity';
+
+@Injectable()
+export class UserRepository extends Repository<UserEntity> {
+  constructor(private readonly dataSource: DataSource) {
+    super(UserEntity, dataSource.manager); // Инициализация UserEntity и EntityManager
+  }
+}
+```
+
+#### Объяснение кода:
+1. `UserRepository` наследует `Repository<UserEntity>`, где `<UserEntity>` — это сущность пользователя.
+2. Мы инжектируем `DataSource` через конструктор для создания `EntityManager`, управляющего `UserEntity`.
+
+### На практике:
+> Теперь, если нам нужно получить всех пользователей с определенными фильтрами, мы сможем реализовать
+соответствующие методы внутри `UserRepository`.
+
+---
+
+## Создание кастомных репозиториев для других сущностей
+
+Для каждой новой сущности мы создадим отдельный кастомный репозиторий по аналогии с `UserRepository`.
+
+### Пример: репозиторий для `RefreshToken`
+
+```typescript
+import { Injectable } from '@nestjs/common';
+import { DataSource, Repository } from 'typeorm';
+import { RefreshTokenEntity } from '../../../database/entities/refresh-token.entity';
+
+@Injectable()
+export class RefreshTokenRepository extends Repository<RefreshTokenEntity> {
+  constructor(private readonly dataSource: DataSource) {
+    super(RefreshTokenEntity, dataSource.manager);
+  }
+}
+```
+
+#### Объяснение:
+Здесь `RefreshTokenRepository` отвечает за управление сущностью `RefreshToken`, что позволяет гибко работать с
+токенами обновления.
+
+### Аналогично создадим репозитории для других сущностей:
+- **Articles** (`ArticleEntity`)
+- **Comments** (`CommentEntity`)
+- **Followers** (`FollowEntity`)
+- **Likes** (`LikeEntity`)
+
+```typescript
+import { Injectable } from '@nestjs/common';
+import { DataSource, Repository } from 'typeorm';
+import { ArticleEntity } from '../../../database/entities/article.entity';
+
+@Injectable()
+export class ArticleRepository extends Repository<ArticleEntity> {
+  constructor(private readonly dataSource: DataSource) {
+    super(ArticleEntity, dataSource.manager);
+  }
+}
+```
+
+---
+
+## Регистрация кастомных репозиториев в модуле
+
+### Создание глобального модуля `RepositoryModule`
+
+Чтобы кастомные репозитории были доступны во всем приложении, создадим модуль `RepositoryModule` и объявим его глобальным.
+Это упростит использование репозиториев в любом месте приложения.
+
+```typescript
+import { Global, Module } from '@nestjs/common';
+
+import { ArticleRepository } from './services/article.repository';
+import { CommentRepository } from './services/comment.repository';
+import { FollowRepository } from './services/follow.repository';
+import { LikeRepository } from './services/like.repository';
+import { RefreshTokenRepository } from './services/refresh-token.repository';
+import { UserRepository } from './services/user.repository';
+
+const repositories = [
+  UserRepository,
+  ArticleRepository,
+  CommentRepository,
+  FollowRepository,
+  LikeRepository,
+  RefreshTokenRepository,
+];
+
+@Global()
+@Module({
+  providers: [...repositories],
+  exports: [...repositories],
+})
+export class RepositoryModule {}
+```
+
+### Объяснение:
+1. **Декоратор `@Global()`** делает модуль доступным для любого модуля в приложении.
+2. **Экспорт репозиториев:** `exports: [...repositories]` — теперь каждый сервис или контроллер может
+инжектировать репозиторий напрямую.
+
+---
+
+## Итог
+
+Мы рассмотрели:
+1. **Преимущества кастомных репозиториев**, которые позволяют реализовать логику, специфичную для приложения.
+2. **Создание и инжекцию зависимостей** для работы с `DataSource` и `EntityManager`.
+3. **Регистрацию кастомных репозиториев** в глобальном модуле `RepositoryModule` для упрощенного доступа.
+
+В следующем уроке мы рассмотрим **оптимизацию запросов** и **работу с более сложными выборками данных**.
