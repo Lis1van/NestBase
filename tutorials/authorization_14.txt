@@ -1,0 +1,1390 @@
+Авторизация в NestJS — важная часть разработки современных веб-приложений,
+так как она обеспечивает доступ к ресурсам на основе прав пользователей.
+В этом разделе рассмотрим ключевые шаги по созданию системы авторизации.
+
+1. Установка необходимых пакетов
+Начнем с установки пакетов, необходимых для работы с JWT (JSON Web Tokens),
+который часто используется для авторизации:
+
+npm i @nestjs/jwt
+Что делает эта команда:
+
+Устанавливает пакет @nestjs/jwt: Добавляет в ваш проект NestJS пакет, специально разработанный для работы
+с JSON Web Tokens (JWT). JWT - это стандартный способ безопасной передачи информации между двумя сторонами
+как компактный самодостаточный JSON объект.
+Зачем нужен @nestjs/jwt:
+
+Аутентификация: Пакет предоставляет инструменты для создания, проверки и декодирования JWT,
+ что делает его незаменимым для реализации систем аутентификации в приложениях на NestJS.
+ JWT часто используются для авторизации пользователей, т.е. определения, какие действия пользователь может выполнять.
+Авторизация: JWT позволяют хранить информацию о пользователе, такую как роли или права доступа.
+Это позволяет защищать определенные части вашего приложения и предоставлять пользователям только те ресурсы,
+к которым они имеют право доступа.
+Безопасность: JWT обеспечивают более безопасный способ аутентификации по сравнению с традиционными сессионными куки,
+так как они не хранятся на сервере и могут быть подписаны для предотвращения подделки.
+Основные возможности пакета:
+
+Создание JWT: Генерация новых токенов с необходимыми данными о пользователе.
+Проверка JWT: Проверка подлинности токенов и извлечение из них данных.
+Декодирование JWT: Чтение информации, содержащейся в токенах.
+Поддержка различных алгоритмов подписи: Поддержка различных алгоритмов подписи JWT, таких, как HS256, RS256 и другие.
+Как использовать @nestjs/jwt в NestJS:
+
+Установка: Выполните команду npm i @nestjs/jwt в терминале вашего проекта.
+Импорт в модуль: Импортируйте модуль JwtModule в ваш модуль NestJS и настройте его в методе forRootAsync.
+Использование в сервисах и контроллерах: Используйте предоставляемые сервисы для создания,
+проверки и декодирования JWT.
+Пример использования:
+
+TypeScript
+import { Module } from '@nestjs/common';
+import { JwtModule } from '@nestjs/jwt';
+
+@Module({
+  imports: [
+    JwtModule.register({
+      secret: 'your-secret-key',
+      signOptions: { expiresIn: '1h'  
+ },
+    }),
+  ],
+})
+export class AppModule {}
+Используйте код с осторожностью.
+
+Что означают параметры в JwtModule.register:
+
+secret: секретный ключ, используемый для подписи и проверки JWT.
+signOptions: дополнительные параметры для создания JWT, такие, как expiresIn для указания времени жизни токена.
+Преимущества использования @nestjs/jwt:
+
+Простая интеграция: Легко интегрируется в существующие приложения NestJS.
+Высокая производительность: Обеспечивает высокую производительность при работе с JWT.
+Гибкость: Поддерживает различные алгоритмы подписи и настройки.
+Хорошая документация: Имеет подробную документацию, которая поможет вам быстро освоить пакет.
+В заключение:
+
+Пакет @nestjs/jwt является мощным инструментом для реализации аутентификации и авторизации в приложениях NestJS.
+Он упрощает работу с JWT и обеспечивает безопасность вашего приложения.
+-------
+npm i bcrypt
+Что делает эта команда:
+
+Устанавливает пакет bcrypt: Добавляет пакет bcrypt в список зависимостей вашего проекта (в папку node_modules).
+Bcrypt - это популярный пакет для Node.js, используемый для безопасного хеширования паролей.
+Он применяет алгоритм bcrypt, который считается одним из наиболее надежных способов защиты паролей от взлома.
+Зачем нужен bcrypt:
+ Хранение паролей: Bcrypt преобразует обычный пароль в необратимый хэш. Это означает,
+  что даже если кто-то получит доступ к базе данных, он не сможет восстановить исходные пароли.
+ Защита от атак: Алгоритм bcrypt использует соль и несколько раундов хеширования,
+  что делает его устойчивым к различным видам атак, включая брутфорс и радужные таблицы.
+---------------
+npm i -D @types/bcrypt
+Что делает эта команда:
+
+Устанавливает определения типов для bcrypt: Добавляет файл с определениями типов TypeScript для
+пакета bcrypt в папку node_modules/@types.
+Определения типов (type definitions) предоставляют информацию о типах данных, функциях и классах,
+используемых в пакете bcrypt. Это позволяет использовать автодополнение и проверку типов в среде разработки,
+что улучшает качество кода и уменьшает количество ошибок.
+Зачем нужны определения типов:
+
+Автодополнение: Ваша IDE (например, Visual Studio Code) сможет предлагать автодополнение кода при работе с
+функциями и объектами из bcrypt.
+Проверка типов: TypeScript проверит ваш код на соответствие типам, что поможет выявить потенциальные ошибки
+ на ранней стадии разработки.
+Лучшая читаемость кода: Определения типов делают код более понятным и самодокументирующим.
+Вывод:
+
+Команды npm i bcrypt и npm i -D @types/bcrypt являются важными для разработчиков Node.js, которые хотят
+обеспечить безопасное хранение паролей в своих приложениях. Bcrypt обеспечивает надежное хеширование,
+а определения типов улучшают процесс разработки.
+
+Дополнительные замечания:
+
+-D (–save-dev): Флаг -D указывает, что пакет bcrypt является зависимостью разработки и будет установлен в devDependencies.
+Это означает, что он не будет включен в производственную версию вашего приложения.
+@types: Префикс @types указывает, что пакет содержит только определения типов, а не сам код библиотеки.
+Использование в проекте:
+
+После установки этих пакетов вы сможете использовать bcrypt в своем JavaScript коде.
+Например, для хеширования пароля перед сохранением его в базе данных.
+---------------------
+Далее создадим новый модуль auth в нашей папке src/modules
+
+nest g res modules/auth --no-spec
+Что делает эта команда:
+
+Эта команда, используемая в контексте фреймворка NestJS, предназначена для быстрого создания структуры
+для нового ресурса (обычно это сущность, представляющая некоторую часть данных в вашем приложении) и связанных
+ с ним компонентов. В данном случае, команда генерирует структуру для модуля аутентификации.
+
+Разберем команду по частям:
+
+nest g: Это сокращение от nest generate. Это встроенная команда в инструментарии NestJS, которая позволяет
+генерировать различные строительные блоки приложения, такие как модули, контроллеры, сервисы и другие.
+res: Указывает, что мы хотим сгенерировать ресурс (resource). Ресурс в NestJS обычно представляет собой сущность
+с соответствующими CRUD операциями (создание, чтение, обновление, удаление).
+modules/auth: Определяет путь и имя модуля, который будет создан. В данном случае, будет создан модуль с именем
+auth внутри папки modules.
+--no-spec: Этот флаг указывает, что мы не хотим генерировать тестовые файлы (spec файлы) для сгенерированных компонентов.
+Тестовые файлы используются для написания юнит-тестов, но если вы не планируете писать тесты сразу,
+этот флаг позволяет сэкономить время.
+Что будет создано:
+
+В результате выполнения этой команды в вашем проекте NestJS будет создана следующая структура:
+
+Модуль: Новый модуль auth с соответствующим импортом и экспортом.
+Контроллер: Контроллер auth.controller.ts, который будет содержать методы для обработки HTTP запросов,
+связанных с аутентификацией (например, регистрация, вход, выход).
+Сервис: Сервис auth.service.ts, который будет содержать бизнес-логику для аутентификации
+(например, проверка паролей, генерация токенов).
+Сущность (entity): Если вы используете TypeORM для работы с базой данных, то также будет создана сущность
+(например, user.entity.ts), которая будет представлять пользователя в базе данных.
+DTO (Data Transfer Object): DTO будут сгенерированы для передачи данных между контроллером и сервисом.
+Зачем использовать эту команду:
+
+Ускорение разработки: Эта команда позволяет быстро создать основу для модуля аутентификации,
+избавляя вас от необходимости писать весь код вручную.
+Стандартизация: Сгенерированная структура соответствует рекомендациям NestJS, что способствует лучшему
+пониманию кода и его поддержке.
+Производительность: Отсутствие тестовых файлов ускоряет процесс разработки, особенно на ранних этапах.
+Дополнительные возможности:
+
+Кастомизация: Вы можете настроить процесс генерации с помощью дополнительных параметров.
+Например, вы можете указать, какие типы файлов генерировать или где их размещать.
+Другие ресурсы: Помимо ресурсов, вы можете генерировать другие типы компонентов, такие как сервисы, контроллеры,
+модули и т.д.
+Вывод:
+
+Команда nest g res modules/auth --no-spec является мощным инструментом для быстрого создания структуры для
+модуля аутентификации в приложениях на NestJS. Она позволяет сэкономить время и повысить производительность разработки.
+
+Теперь поправим наши папки и имена файлов, что-то добавим и что-то удалим:
+auth
+--models
+--|--dto
+--|--|--req
+--|--|--|--base-auth.req.dto.ts
+--|--|--|--login.req.dto.ts
+--|--|--|--registration.req.dto.ts
+--|--|--res
+--|--|--|--auth.res.dto.ts
+--services
+--|--auth.service.ts
+--auth.controller.ts
+--auth.module.ts
+
+Теперь в нашем модуле users удалим файлы create-user.req.dto.ts потому что логику мы
+вынесем в auth модуль и файл user-list.req.dto.ts
+А файл base-user.req.dto.ts изменим на
+import { ApiProperty } from '@nestjs/swagger';
+import { Transform, Type } from 'class-transformer';
+import { IsOptional, IsString, Length, Matches } from 'class-validator';
+
+import { TransformHelper } from '../../../../../common/helpers/transform.helper';
+
+export class BaseUserReqDto {
+  @IsOptional()
+  @IsString()
+  @Length(3, 50)
+  @Transform(TransformHelper.trim)
+  @Type(() => String)
+  name?: string;
+
+  @IsOptional()
+  @IsString()
+  @Length(0, 300)
+  bio?: string;
+
+  @IsOptional()
+  @IsString()
+  @Length(0, 3000)
+  image?: string;
+
+  @ApiProperty({ example: 'test@gmail.com' })
+  @IsString()
+  @Length(0, 300)
+  @Matches(/^[^\s@]+@([^\s@.,]+\.)+[^\s@.,]{2,}$/)
+  email: string;
+
+  @ApiProperty({ example: '123qwe!@#QWE' })
+  @IsString()
+  @Length(0, 300)
+  @Matches(/^(?=.*[A-Za-z])(?=.*\d)(?=.*[@$!%_*#?&])[A-Za-z\d@$_!%*#?&]{8,}$/)
+  password: string;
+}
+
+Теперь в нашем новом файле base-auth.req.dto.ts мы екстендимся от BaseUserReqDto
+import { PickType } from '@nestjs/swagger';
+import { IsNotEmpty, IsString } from 'class-validator';
+
+import { BaseUserReqDto } from '../../../../users/models/dto/req/base-user.req.dto';
+
+export class BaseAuthReqDto extends PickType(BaseUserReqDto, [
+  'email',
+  'password',
+  'bio',
+  'image',
+  'name',
+]) {
+  @IsNotEmpty()
+  @IsString()
+  readonly deviceId: string;
+}
+
+Далее пишем логику в нашем файле login.req.dto.ts
+import { PickType } from '@nestjs/swagger';
+
+import { BaseAuthReqDto } from './base-auth.req.dto';
+
+export class LoginReqDto extends PickType(BaseAuthReqDto, [
+  'email',
+  'password',
+  'bio',
+  'name',
+  'deviceId',
+]) {}
+
+
+Теперь в файле registration.req.dto.ts
+import { PickType } from '@nestjs/swagger';
+
+import { BaseAuthReqDto } from './base-auth.req.dto';
+
+export class RegistrationReqDto extends PickType(BaseAuthReqDto, [
+  'email',
+  'password',
+  'deviceId',
+]) {}
+
+Обновляем auth.controller.ts
+import { Body, Controller, Post } from '@nestjs/common';
+import { ApiTags } from '@nestjs/swagger';
+
+import { LoginReqDto } from './models/dto/req/login.req.dto';
+import { RegistrationReqDto } from './models/dto/req/registration.req.dto';
+import { AuthService } from './services/auth.service';
+
+@ApiTags('Auth')
+@Controller('auth')
+export class AuthController {
+  constructor(private readonly authService: AuthService) {}
+
+  @Post()
+  public async registration(@Body() dto: RegistrationReqDto): Promise<any> {
+    return await this.authService.registration(dto);
+  }
+
+  @Post()
+  public async login(@Body() dto: LoginReqDto): Promise<any> {
+    return await this.authService.login(dto);
+  }
+}
+
+
+Теперь обновим auyh.service.ts
+import { Injectable, Post } from '@nestjs/common';
+
+import { UserRepository } from '../../repositories/services/user.repository';
+import { LoginReqDto } from '../models/dto/req/login.req.dto';
+import { RegistrationReqDto } from '../models/dto/req/registration.req.dto';
+
+@Injectable()
+export class AuthService {
+  constructor(private userRepository: UserRepository) {}
+
+  public async registration(dto: RegistrationReqDto): Promise<any> {
+    // return await this.authService.create(dto);
+  }
+
+  @Post()
+  public async login(dto: LoginReqDto): Promise<any> {
+    // return await this.authService.create(dto);
+  }
+}
+
+
+Пишем код в файле auth.res.dto.ts
+import { UserResDto } from '../../../../users/models/dto/res/user.res.dto';
+import { TokenPairResDto } from './token-pair.res.dto';
+
+export class AuthResDto {
+  tokens: TokenPairResDto;
+  user: UserResDto;
+}
+Добовляем в папке auth/models/dto/res файл token-pair.res.dto.ts
+export class TokenPairResDto {
+  accessToken: string;
+  refreshToken: string;
+}
+
+
+Опять обновим файл auth.controller.ts
+import { Body, Controller, Post } from '@nestjs/common';
+import { ApiTags } from '@nestjs/swagger';
+
+import { LoginReqDto } from './models/dto/req/login.req.dto';
+import { RegistrationReqDto } from './models/dto/req/registration.req.dto';
+import { AuthService } from './services/auth.service';
+import { AuthResDto } from './models/dto/res/auth.res.dto';
+
+@ApiTags('Auth')
+@Controller('auth')
+export class AuthController {
+  constructor(private readonly authService: AuthService) {}
+
+  @Post('registr')
+  public async registration(@Body() dto: RegistrationReqDto): Promise<AuthResDto> {
+    return await this.authService.registration(dto);
+  }
+
+  @Post('login')
+  public async login(@Body() dto: LoginReqDto): Promise<AuthResDto> {
+    return await this.authService.login(dto);
+  }
+}
+
+
+Исправим наш файл user-base.res.dto.ts
+export class UserBaseResDto {
+  id: string;
+  name: string;
+  email: string;
+  bio?: string;
+  image?: string;
+}
+
+
+Исправляем файл user.service.ts
+import { ForbiddenException, Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+
+import { AppConfig, ConfigType } from '../../../configs/config.type';
+import { UserRepository } from '../../repositories/services/user.repository';
+import { UpdateUserReqDto } from '../models/dto/req/update-user.req.dto';
+import { UserResDto } from '../models/dto/res/user.res.dto';
+
+@Injectable()
+export class UsersService {
+  constructor(
+    private readonly configService: ConfigService<ConfigType>,
+    private userRepository: UserRepository,
+  ) {}
+
+  findOne(id: number) {
+    return `This action returns a #${id} user`;
+  }
+
+  update(id: number, updateUserDto: UpdateUserReqDto) {
+    return `This action updates a #${id} user`;
+  }
+
+  remove(id: number) {
+    return `This action removes a #${id} user`;
+  }
+
+  public async checkAbilityToEditArticle(userId: string, articleId: string) {
+    // Check if the user has permission to edit the article
+  }
+}
+
+
+Исправляем файл user.controller.ts
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+} from '@nestjs/common';
+import { ApiTags } from '@nestjs/swagger';
+
+import { UpdateUserReqDto } from './models/dto/req/update-user.req.dto';
+import { UsersService } from './services/users.service';
+
+@ApiTags('Users')
+@Controller('users')
+export class UsersController {
+  constructor(private readonly usersService: UsersService) {}
+
+  @Get(':id')
+  findOne(@Param('id', ParseUUIDPipe) id: string) {
+    return this.usersService.findOne(+id);
+  }
+
+  @Patch(':id')
+  update(@Param('id') id: string, @Body() updateUserDto: UpdateUserReqDto) {
+    return this.usersService.update(+id, updateUserDto);
+  }
+
+  @Delete(':id')
+  remove(@Param('id') id: string) {
+    return this.usersService.remove(+id);
+  }
+}
+
+
+Исправляем файл user.res.dto.ts
+import { PickType } from '@nestjs/swagger';
+
+import { UserBaseResDto } from './user-base.res.dto';
+
+export class UserResDto extends PickType(UserBaseResDto, [
+  'id',
+  'name',
+  'email',
+  'bio',
+  'image',
+]) {}
+
+
+Запускаем скрипты start:docker:local и start:dev и смотрим чтобы все работало
+
+Хорошо. Модели описали теперь давайте создадим несколько сервисов которыми мы будем сохранять всю инфу.
+Так как у нас сейчас есть только файл redis.module.ts и всё, а нам нужно каким-то образом в redis что-то ложить.
+Будем использовать такой тип данных как set в redis и под него есть специадьные методы.
+Мы сейчас сделаем маленький адаптер с помощью которого быдем пользоваться чтобы что-то кидать в redis.
+Это как бы репозиторий, который будет общатся с самим redis.
+Для этого мы создаем папку src/modules/redis/services а в ней файл redis.service.ts
+import { Inject, Injectable } from '@nestjs/common';
+import { Redis } from 'ioredis';
+
+import { REDIS_CLIENT } from '../models/redis.constants';
+
+@Injectable()
+export class RedisService {
+  constructor(
+    @Inject(REDIS_CLIENT)
+    private readonly redisClient: Redis,
+  ) {}
+  /**
+   * Add member to hash set.
+   */
+  public async addOneToSet(hash: string, value: string): Promise<number> {
+    return await this.redisClient.sadd(hash, value);
+  }
+  /**
+   * Remove one member from hash set.
+   */
+  public async remOneFromSet(key: string, setMember: string): Promise<number> {
+    return await this.redisClient.srem(key, setMember);
+  }
+  /**
+   * Delete all records by key from Redis.
+   */
+  public async deleteByKey(key: string): Promise<number> {
+    return await this.redisClient.del(key);
+  }
+  /**
+   * Get all the members in a set.
+   */
+  public async sMembers(key: string): Promise<string[]> {
+    return await this.redisClient.smembers(key);
+  }
+  /**
+   * Sets a timeout on a key.
+   * After the timeout, the key will be automatically deleted.
+   */
+  public async expire(key: string, time: number): Promise<number> {
+    return await this.redisClient.expire(key, time);
+  }
+}
+
+
+Теперь добавим папку src/modules/redis/models а в ней файл redis.constants.ts
+export const REDIS_CLIENT = 'REDIS_CLIENT';
+Обновим наш файл redis.module.ts
+import { Module } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import Redis from 'ioredis';
+
+import { ConfigType, RedisConfig } from '../../configs/config.type';
+import { REDIS_CLIENT } from './models/redis.constants';
+import { RedisService } from './services/redis.service';
+
+@Module({
+  providers: [
+    {
+      provide: REDIS_CLIENT,
+      useFactory: (configService: ConfigService<ConfigType>) => {
+        const config = configService.get<RedisConfig>('redis');
+        return new Redis({
+          port: config.port,
+          host: config.host,
+          password: config.password,
+        });
+      },
+      inject: [ConfigService],
+    },
+    RedisService,
+  ],
+  exports: [RedisService],
+})
+export class RedisModule {}
+
+
+Добовляем RedisModule в AuthModule
+import { Module } from '@nestjs/common';
+
+import { RedisModule } from '../redis/redis.module';
+import { AuthController } from './auth.controller';
+import { AuthService } from './services/auth.service';
+
+@Module({
+  imports: [RedisModule],
+  controllers: [AuthController],
+  providers: [AuthService],
+})
+export class AuthModule {}
+
+
+Продолжим дальше. У нас есть auth.service.ts в который уже потенциально приходят данные.
+Здесь мы будем создавать юзера, делать ему новые токены, сохранять кудато наши токены.
+Для того чтобы их сохронять нам нужен еще один слой который будет взаимодействовать непосредственно с тем сервисом,
+чтобы мы не загромождали наш главный сервис auth. Один сервис должен отвечать за какието свои задачи.
+Для этого в папке src/modules/auth/services добавим еще один сервис auth-cache-service.ts
+import { Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config/dist/config.service';
+
+import { ConfigType, JwtConfig } from '../../../configs/config.type';
+import { RedisService } from '../../redis/services/redis.service';
+
+@Injectable()
+export class AuthCacheService {
+  private jwtConfig: JwtConfig;
+
+  constructor(
+    private readonly redisService: RedisService,
+    private readonly configService: ConfigService<ConfigType>,
+  ) {
+    this.jwtConfig = this.configService.get('jwt');
+  }
+
+  public async saveToken(
+    token: string,
+    userId: string,
+    deviceId: string,
+  ): Promise<void> {
+    const key = `ACCESS_TOKEN:${userId}:${deviceId}`;
+    await this.redisService.deleteByKey(key);
+    await this.redisService.addOneToSet(key, token);
+    await this.redisService.expire(key, this.jwtConfig.accessExpiresIn);
+  }
+}
+
+
+Теперь в файле config.type.ts добавим код
+export type ConfigType = {
+  app: AppConfig;
+  postgres: PostgresConfig;
+  redis: RedisConfig;
+  aws: AwsConfig;
+  sentry: SentryConfig;
+  jwt: JwtConfig;
+};
+
+export type AppConfig = {
+  port: number;
+  host: string;
+};
+
+export type PostgresConfig = {
+  host: string;
+  port: number;
+  username: string;
+  password: string;
+  database: string;
+};
+
+export type RedisConfig = {
+  host: string;
+  port: number;
+  password: string;
+};
+
+export type AwsConfig = {
+  accessKey: string;
+  secretKey: string;
+};
+
+export type SentryConfig = {
+  dsn: string;
+  env: string;
+  debug: boolean;
+};
+
+export type JwtConfig = {
+  accessSecret: string;
+  accessExpiresIn: number;
+  refreshSecret: string;
+  refreshExpiresIn: number;
+};
+
+
+Тепрь обновим файл configuration.ts
+import { ConfigType } from './config.type';
+
+export default (): ConfigType => ({
+  app: {
+    port: parseInt(process.env.APP_PORT, 10) || 3003,
+    host: process.env.APP_HOST,
+  },
+  postgres: {
+    host: process.env.POSTGRES_HOST,
+    port: parseInt(process.env.POSTGRES_PORT, 10) || 5432,
+    username: process.env.POSTGRES_USER,
+    password: process.env.POSTGRES_PASSWORD,
+    database: process.env.POSTGRES_DB,
+  },
+  redis: {
+    host: process.env.REDIS_HOST,
+    port: parseInt(process.env.REDIS_PORT, 10) || 6379,
+    password: process.env.REDIS_PASSWORD,
+  },
+  aws: {
+    accessKey: process.env.AWS_S3_ACCESS_KEY,
+    secretKey: process.env.AWS_S3_SECRET_KEY,
+  },
+  sentry: {
+    dsn: process.env.SENTRY_DSN,
+    env: process.env.SENTRY_ENV,
+    debug: process.env.SENTRY_DEBUG === 'true',
+  },
+  jwt: {
+    accessSecret: process.env.JWT_ACCESS_SECRET,
+    accessExpiresIn: parseInt(process.env.JWT_ACCESS_EXPIRES_IN, 10) || 3600,
+    refreshSecret: process.env.JWT_REFRESH_SECRET,
+    refreshExpiresIn: parseInt(process.env.JWT_REFRESH_EXPIRES_IN, 10) || 86400,
+  },
+});
+
+
+Обновим наш .env файл
+APP_PORT=3000
+APP_HOST=localhost
+
+POSTGRES_HOST=localhost
+POSTGRES_PORT=5433
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=postgres
+POSTGRES_DB=nest_base
+
+REDIS_HOST=localhost
+REDIS_PORT=6379
+REDIS_PASSWORD=redispass
+
+AWS_S3_ACCESS_KEY=
+AWS_S3_SECRET_KEY=
+
+SENTRY_DSN="https://a8a22ea23665ad127f65bb176884d50d@o4508161883701248.ingest.de.sentry.io/4508239901818960"
+SENTRY_ENV=local
+SENTRY_DEBUG=true
+
+JWT_ACCESS_SECRET=someAccessSecret
+JWT_ACCESS_EXPIRES_IN=3600
+JWT_REFRESH_SECRET=someRefreshSecret
+JWT_REFRESH_EXPIRES_IN=800800
+
+
+Добовляем AuthCacheService в провайдеры AuthModule
+import { Module } from '@nestjs/common';
+
+import { RedisModule } from '../redis/redis.module';
+import { AuthController } from './auth.controller';
+import { AuthService } from './services/auth.service';
+import { AuthCacheService } from './services/auth-cache-service';
+
+@Module({
+  imports: [RedisModule],
+  controllers: [AuthController],
+  providers: [AuthService, AuthCacheService],
+})
+export class AuthModule {}
+
+
+Далее, для генерации токенов, в той же папке src/modules/auth/services создадим файл token.service.ts
+import { Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config/dist/config.service';
+import { JwtService } from '@nestjs/jwt';
+
+import { ConfigType, JwtConfig } from '../../../configs/config.type';
+import { IJwtPayload } from '../models/interfaces/jwt-payload.interface';
+import { ITokenPair } from '../models/interfaces/token-pair.interface';
+
+@Injectable()
+export class TokenService {
+  private readonly jwtConfig: JwtConfig;
+
+  constructor(
+    private readonly jwtService: JwtService,
+    private readonly configService: ConfigService<ConfigType>,
+  ) {
+    this.jwtConfig = configService.get<JwtConfig>('jwt');
+  }
+
+  public async generateAuthTokens(payload: IJwtPayload): Promise<ITokenPair> {
+    const accessToken = await this.jwtService.signAsync(payload, {
+      secret: this.jwtConfig.accessSecret,
+      expiresIn: this.jwtConfig.accessExpiresIn,
+    });
+    const refreshToken = await this.jwtService.signAsync(payload, {
+      secret: this.jwtConfig.refreshSecret,
+      expiresIn: this.jwtConfig.refreshExpiresIn,
+    });
+    return { accessToken, refreshToken };
+  }
+
+  public async verifyToken(token: string): Promise<any> {
+    return await this.jwtService.verifyAsync(token);
+  }
+}
+
+
+Для этого файла создадим два интерфейса. Для этого доблвляем папку src/modules/auth/models/interfaces а в
+ней два файла jwt-payload.interface.ts
+export interface IJwtPayload {
+  deviceId: string;
+  userId: string;
+}
+
+и файл token-pair.interface.ts
+export interface ITokenPair {
+  accessToken: string;
+  refreshToken: string;
+}
+
+
+Код в файле token.service.ts практически не отличается от функционала который мы уже реализовывали.
+Есть метод, который генерирует токены и есть метод который проверяет токены.
+Теперь возвращаемся и доробатываем наш файл auth.service.ts
+import { Injectable } from '@nestjs/common';
+import * as bcrypt from 'bcrypt';
+
+import { RefreshTokenRepository } from '../../repositories/services/refresh-token.repository';
+import { UserRepository } from '../../repositories/services/user.repository';
+import { UserMapper } from '../../users/services/user.mapper';
+import { LoginReqDto } from '../models/dto/req/login.req.dto';
+import { RegistrationReqDto } from '../models/dto/req/registration.req.dto';
+import { AuthResDto } from '../models/dto/res/auth.res.dto';
+import { AuthCacheService } from './auth-cache-service';
+import { TokenService } from './token.service';
+
+@Injectable()
+export class AuthService {
+  constructor(
+    private readonly authCacheService: AuthCacheService,
+    private readonly tokenService: TokenService,
+    private readonly userRepository: UserRepository,
+    private readonly refreshTokenRepository: RefreshTokenRepository,
+  ) {}
+
+  public async registration(dto: RegistrationReqDto): Promise<AuthResDto> {
+    await this.isEmailNotExistOrThrow(dto.email);
+    const password = await bcrypt.hash(dto.password, 10);
+    const user = await this.userRepository.save(
+      this.userRepository.create({ ...dto, password }),
+    );
+    const tokens = await this.tokenService.generateAuthTokens({
+      userId: user.id,
+      deviceId: dto.deviceId,
+    });
+    await Promise.all([
+      this.authCacheService.saveToken(
+        tokens.accessToken,
+        user.id,
+        dto.deviceId,
+      ),
+      this.refreshTokenRepository.save(
+        this.refreshTokenRepository.create({
+          user_id: user.id,
+          deviceId: dto.deviceId,
+          refreshToken: tokens.refreshToken,
+        }),
+      ),
+    ]);
+
+    return { user: UserMapper.toResDto(user), tokens };
+  }
+
+  public async login(dto: LoginReqDto): Promise<any> {
+    // return await this.authService.create(dto);
+  }
+
+  private async isEmailNotExistOrThrow(email: string) {
+    const user = await this.userRepository.findOneBy({ email });
+    if (user) {
+      throw new Error('Email already exists');
+    }
+  }
+}
+
+
+Для этого файла надо создать файл user.mapper.ts (это отдельный слой который отвечает за мапинг данных) в
+ папке src/modules/users/services
+import { UserEntity } from '../../../database/entities/user.entity';
+import { UserResDto } from '../models/dto/res/user.res.dto';
+
+export class UserMapper {
+  public static toResDto(user: UserEntity): UserResDto {
+    return {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      bio: user.bio,
+      image: user.image,
+    };
+  }
+}
+
+
+Проверить добавили ли мы TokenService  в провайдеры AuthModule а в импорты JwtModule
+import { Module } from '@nestjs/common';
+import { JwtModule } from '@nestjs/jwt';
+
+import { RedisModule } from '../redis/redis.module';
+import { AuthController } from './auth.controller';
+import { AuthService } from './services/auth.service';
+import { AuthCacheService } from './services/auth-cache-service';
+import { TokenService } from './services/token.service';
+
+@Module({
+  imports: [JwtModule, RedisModule],
+  controllers: [AuthController],
+  providers: [AuthService, AuthCacheService, TokenService],
+})
+export class AuthModule {}
+
+
+Теперь проверяем работоспособность. Запускаем скрипты start:docker:local и скрипт start:dev Идем в swagger и в
+разделе auth registr нажимаем на try it а затем на execute. Обновляем нашу базу данных postgres  и в
+таблице users должен появится наш юзер с данными которые были введены в swagger при регистрации.
+
+Далее сделаем типы для наших ID которые дают возможность по строчке делать уникальный тип.
+Для этого сделаем новую папку src/common/types а в ней файл opaque.type.ts
+declare const typeID: unique symbol;
+/**
+ * Allows pseudo-nominal typing in TypeScript (which uses structural typing).
+ * For example, Opaque<string, "EmployeeID">
+ *
+ * See https://evertpot.com/opaque-ts-types/ for detailed explanation.
+ */
+export type Opaque<T, Identifier extends string> = T & {
+  [typeID]: Identifier;
+};
+
+Далее там же делаем файл entity-ids.type.ts
+import { Opaque } from './opaque.type';
+
+export type ArticleID = Opaque<string, 'ArticleID'>;
+export type CommentID = Opaque<string, 'CommentID'>;
+export type FollowID = Opaque<string, 'FollowID'>;
+export type LikeID = Opaque<string, 'LikeID'>;
+export type RefreshTokenID = Opaque<string, 'RefreshTokenID'>;
+export type TagID = Opaque<string, 'TagID'>;
+export type UserID = Opaque<string, 'UserID'>;
+
+Теперь эти типы будем использовать везде где у нас есть ID Например в наших entity файлах:
+@Entity(TableNameEnum.USERS)
+export class UserEntity extends CreateUpdateModel {
+  @PrimaryGeneratedColumn('uuid')
+  id: UserID;
+
+Теперь у нас есть возможность затипизировать наши ID более узко чем просто string
+Возьмем к примеру наш файл users.controller.ts
+import {
+  Body,
+  Controller,
+  Delete,
+  Get,
+  Param,
+  ParseUUIDPipe,
+  Patch,
+} from '@nestjs/common';
+import { ApiTags } from '@nestjs/swagger';
+
+import { UserID } from '../../common/types/entity-ids.type';
+import { UpdateUserReqDto } from './models/dto/req/update-user.req.dto';
+import { UsersService } from './services/users.service';
+
+@ApiTags('Users')
+@Controller('users')
+export class UsersController {
+  constructor(private readonly usersService: UsersService) {}
+
+  @Get(':id')
+  findOne(@Param('id', ParseUUIDPipe) id: UserID) {
+    return this.usersService.findOne(+id);
+  }
+
+  @Patch(':id')
+  update(@Param('id') id: UserID, @Body() updateUserDto: UpdateUserReqDto) {
+    return this.usersService.update(+id, updateUserDto);
+  }
+
+  @Delete(':id')
+  remove(@Param('id') id: UserID) {
+    return this.usersService.remove(+id);
+  }
+}
+
+Так же в нашем файле users.service.ts
+import { Injectable } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+
+import { ArticleID, UserID } from '../../../common/types/entity-ids.type';
+import { ConfigType } from '../../../configs/config.type';
+import { ArticleRepository } from '../../repositories/services/article.repository';
+import { UserRepository } from '../../repositories/services/user.repository';
+import { UpdateUserReqDto } from '../models/dto/req/update-user.req.dto';
+
+@Injectable()
+export class UsersService {
+  constructor(
+    private readonly configService: ConfigService<ConfigType>,
+    private userRepository: UserRepository,
+    private articleRepository: ArticleRepository,
+  ) {}
+
+  findOne(id: UserID) {
+    return `This action returns a #${id} user`;
+  }
+
+  update(id: UserID, updateUserDto: UpdateUserReqDto) {
+    return `This action updates a #${id} user`;
+  }
+
+  remove(id: UserID) {
+    return `This action removes a #${id} user`;
+  }
+
+  public async checkAbilityToEditArticle(userId: UserID, articleId: ArticleID) {
+    // Check if the user has permission to edit the article
+    const article = await this.articleRepository.findOne({
+      where: { id: articleId, user_id: userId },
+    });
+  }
+}
+--------------------
+Документация:
+
+Авторизация
+Авторизация относится к процессу, который определяет, что пользователь может делать.
+Например, администратору разрешено создавать, редактировать и удалять сообщения.
+Неадминистративному пользователю разрешено только читать сообщения.
+
+Авторизация ортогональна и независима от аутентификации. Однако для авторизации требуется механизм аутентификации.
+
+Существует множество различных подходов и стратегий для обработки авторизации.
+Подход, используемый для любого проекта, зависит от его конкретных требований к приложению.
+В этой главе представлено несколько подходов к авторизации, которые можно адаптировать к различным требованиям.
+
+Базовая реализация RBAC
+Управление доступом на основе ролей (RBAC) — это нейтральный к политике механизм управления доступом,
+определенный вокруг ролей и привилегий. В этом разделе мы покажем, как реализовать очень простой
+механизм RBAC с использованием Nest Guards.
+
+Сначала давайте создадим перечисление Role, представляющее роли в системе:
+
+
+export enum Role {
+  User = 'user',
+  Admin = 'admin',
+}
+
+Подсказка
+В более сложных системах вы можете хранить роли в базе данных или извлекать их из внешнего поставщика аутентификации.
+При этом мы можем создать декоратор @Roles(). Этот декоратор позволяет указать,
+какие роли требуются для доступа к определенным ресурсам.
+
+'roles.decorator.ts'
+
+import { SetMetadata } from '@nestjs/common';
+import { Role } from '../enums/role.enum';
+
+export const ROLES_KEY = 'roles';
+export const Roles = (...roles: Role[]) => SetMetadata(ROLES_KEY, roles);
+
+Теперь, когда у нас есть собственный декоратор @Roles(), мы можем использовать его для декорирования любого
+обработчика маршрута.
+
+'cats.controller.ts'
+
+@Post()
+@Roles(Role.Admin)
+create(@Body() createCatDto: CreateCatDto) {
+  this.catsService.create(createCatDto);
+}
+
+Наконец, мы создаем класс RolesGuard, который будет сравнивать роли, назначенные текущему пользователю,
+с фактическими ролями, требуемыми текущим обрабатываемым маршрутом. Чтобы получить доступ к ролям
+маршрута (пользовательским метаданным), мы будем использовать вспомогательный класс Reflector,
+который предоставляется фреймворком из коробки и выводится из пакета @nestjs/core.
+
+'roles.guard.ts'
+
+import { Injectable, CanActivate, ExecutionContext } from '@nestjs/common';
+import { Reflector } from '@nestjs/core';
+
+@Injectable()
+export class RolesGuard implements CanActivate {
+  constructor(private reflector: Reflector) {}
+
+  canActivate(context: ExecutionContext): boolean {
+    const requiredRoles = this.reflector.getAllAndOverride<Role[]>(ROLES_KEY, [
+      context.getHandler(),
+      context.getClass(),
+    ]);
+    if (!requiredRoles) {
+      return true;
+    }
+    const { user } = context.switchToHttp().getRequest();
+    return requiredRoles.some((role) => user.roles?.includes(role));
+  }
+}
+
+Совет
+Дополнительные сведения об использовании Reflector с учетом контекста см. в разделе «Отражение и метаданные»
+главы «Контекст выполнения» (https://docs.nestjs.com/fundamentals/execution-context#reflection-and-metadata).
+
+Примечание
+Этот пример назван «базовым», поскольку мы проверяем наличие ролей только на уровне обработчика маршрута.
+В реальных приложениях у вас могут быть конечные точки/обработчики, включающие несколько операций,
+в которых каждая из них требует определенного набора разрешений. В этом случае вам придется предоставить
+механизм для проверки ролей где-то в вашей бизнес-логике, что несколько усложнит ее поддержку,
+поскольку не будет централизованного места, связывающего разрешения с определенными действиями.
+В этом примере мы предположили, что request.user содержит экземпляр пользователя и разрешенные роли (в свойстве roles).
+В вашем приложении вы, вероятно, создадите эту связь в своем пользовательском защитнике аутентификации — см. главу
+об аутентификации для получения дополнительных сведений.
+
+Чтобы убедиться, что этот пример работает, ваш класс User должен выглядеть следующим образом:
+
+
+class User {
+  // ...other properties
+  roles: Role[];
+}
+
+Наконец, обязательно зарегистрируйте RolesGuard, например, на уровне контроллера или глобально:
+
+providers: [
+  {
+    provide: APP_GUARD,
+    useClass: RolesGuard,
+  },
+],
+
+Когда пользователь с недостаточными правами запрашивает конечную точку, Nest автоматически возвращает следующий ответ:
+
+{
+  "statusCode": 403,
+  "message": "Forbidden resource",
+  "error": "Forbidden"
+}
+
+Подсказка
+Если вы хотите вернуть другой ответ об ошибке, вам следует создать собственное исключение вместо возврата
+логического значения.
+
+Авторизация на основе утверждений#
+Когда создается идентификатор, ему может быть назначено одно или несколько утверждений, выданных доверенной стороной.
+Утверждение — это пара имя-значение, которая представляет то, что субъект может делать, а не то, чем он является.
+
+Чтобы реализовать авторизацию на основе утверждений в Nest, вы можете выполнить те же шаги, которые мы показали выше
+в разделе RBAC, с одним существенным отличием: вместо проверки определенных ролей вы должны сравнивать разрешения.
+Каждому пользователю будет назначен набор разрешений. Аналогично, каждый ресурс/конечная точка будет определять,
+какие разрешения требуются (например, через выделенный декоратор @RequirePermissions()) для доступа к ним.
+
+'cats.controller.ts'
+
+@Post()
+@RequirePermissions(Permission.CREATE_CAT)
+create(@Body() createCatDto: CreateCatDto) {
+  this.catsService.create(createCatDto);
+}
+
+Подсказка
+В приведенном выше примере Permission (похожий на Role, который мы показали в разделе RBAC) — это перечисление TypeScript,
+которое содержит все разрешения, доступные в вашей системе.
+Интеграция CASL#
+CASL — это изоморфная библиотека авторизации, которая ограничивает, к каким ресурсам разрешен доступ данному клиенту.
+Она разработана для постепенного внедрения и может легко масштабироваться между простой авторизацией на основе
+утверждений и полнофункциональной авторизацией на основе субъектов и атрибутов.
+
+Для начала сначала установите пакет @casl/ability:
+
+npm i @casl/ability
+
+Подсказка
+В этом примере мы выбрали CASL, но вы можете использовать любую другую библиотеку, например accesscontrol или acl,
+в зависимости от ваших предпочтений и потребностей проекта.
+После завершения установки, для иллюстрации механики CASL, мы определим два класса сущностей: User и Article.
+
+
+class User {
+  id: number;
+  isAdmin: boolean;
+}
+
+Класс User состоит из двух свойств: id, который является уникальным идентификатором пользователя, и isAdmin,
+указывающего, имеет ли пользователь права администратора.
+
+
+class Article {
+  id: number;
+  isPublished: boolean;
+  authorId: number;
+}
+
+Класс статьи имеет три свойства, соответственно id, isPublished и authorId. id — это уникальный идентификатор статьи,
+isPublished указывает, была ли статья уже опубликована или нет, а authorId — это идентификатор пользователя,
+написавшего статью.
+
+Теперь давайте рассмотрим и уточним наши требования для этого примера:
+
+Администраторы могут управлять (создавать/читать/обновлять/удалять) всеми сущностями
+Пользователи имеют доступ только для чтения ко всему
+Пользователи могут обновлять свои статьи (article.authorId === userId)
+Уже опубликованные статьи не могут быть удалены (article.isPublished === true)
+Понимая это, мы можем начать с создания перечисления Action, представляющего все возможные действия,
+которые пользователи могут выполнять с сущностями:
+
+
+export enum Action {
+  Manage = 'manage',
+  Create = 'create',
+  Read = 'read',
+  Update = 'update',
+  Delete = 'delete',
+}
+
+Обратите внимание
+manage — это специальное ключевое слово в CASL, которое представляет «любое» действие.
+Чтобы инкапсулировать библиотеку CASL, давайте сейчас сгенерируем CaslModule и CaslAbilityFactory.
+
+nest g module casl
+nest g class casl/casl-ability.factory
+
+Имея это в наличии, мы можем определить метод createForUser() на CaslAbilityFactory.
+Этот метод создаст объект Ability для данного пользователя:
+
+
+type Subjects = InferSubjects<typeof Article | typeof User> | 'all';
+
+export type AppAbility = Ability<[Action, Subjects]>;
+
+@Injectable()
+export class CaslAbilityFactory {
+  createForUser(user: User) {
+    const { can, cannot, build } = new AbilityBuilder<
+      Ability<[Action, Subjects]>
+    >(Ability as AbilityClass<AppAbility>);
+
+    if (user.isAdmin) {
+      can(Action.Manage, 'all'); // read-write access to everything
+    } else {
+      can(Action.Read, 'all'); // read-only access to everything
+    }
+
+    can(Action.Update, Article, { authorId: user.id });
+    cannot(Action.Delete, Article, { isPublished: true });
+
+    return build({
+      // Read https://casl.js.org/v6/en/guide/subject-type-detection#use-classes-as-subject-types for details
+      detectSubjectType: (item) =>
+        item.constructor as ExtractSubjectType<Subjects>,
+    });
+  }
+}
+
+Обратите внимание, что
+all — это специальное ключевое слово в CASL, которое представляет «любой субъект».
+Подсказка
+Классы Ability, AbilityBuilder, AbilityClass и ExtractSubjectType экспортируются из пакета @casl/ability.
+Подсказка
+Опция detectSubjectType позволяет CASL понять, как получить тип субъекта из объекта.
+Для получения дополнительной информации см. документацию CASL для получения подробной информации.
+В приведенном выше примере мы создали экземпляр Ability с помощью класса AbilityBuilder.
+Как вы, вероятно, догадались, can и cannot принимают одни и те же аргументы, но имеют разные значения,
+can позволяет выполнять действие над указанным субъектом и cannot запрещает. Оба могут принимать до 4 аргументов.
+Чтобы узнать больше об этих функциях, посетите официальную документацию CASL.
+
+Наконец, обязательно добавьте CaslAbilityFactory в поставщики и экспортирует массивы в определении модуля CaslModule:
+
+
+import { Module } from '@nestjs/common';
+import { CaslAbilityFactory } from './casl-ability.factory';
+
+@Module({
+  providers: [CaslAbilityFactory],
+  exports: [CaslAbilityFactory],
+})
+export class CaslModule {}
+
+При таком подходе мы можем внедрить CaslAbilityFactory в любой класс, используя стандартное внедрение конструктора,
+при условии, что CaslModule импортирован в контексте хоста:
+
+
+constructor(private caslAbilityFactory: CaslAbilityFactory) {}
+
+Затем используйте его в классе следующим образом.
+
+const ability = this.caslAbilityFactory.createForUser(user);
+if (ability.can(Action.Read, 'all')) {
+  // "user" has read access to everything
+}
+
+Подсказка
+Узнайте больше о классе Ability в официальной документации CASL (https://casl.js.org/v6/en/guide/intro).
+Например, предположим, что у нас есть пользователь, который не является администратором.
+В этом случае пользователь должен иметь возможность читать статьи, но создание новых или удаление существующих
+статей должно быть запрещено.
+
+
+const user = new User();
+user.isAdmin = false;
+
+const ability = this.caslAbilityFactory.createForUser(user);
+ability.can(Action.Read, Article); // true
+ability.can(Action.Delete, Article); // false
+ability.can(Action.Create, Article); // false
+
+Подсказка
+Хотя оба класса Ability и AbilityBuilder предоставляют методы can и cannot, они имеют разные цели и принимают
+немного разные аргументы.
+Кроме того, как мы указали в наших требованиях, пользователь должен иметь возможность обновлять свои статьи:
+
+
+const user = new User();
+user.id = 1;
+
+const article = new Article();
+article.authorId = user.id;
+
+const ability = this.caslAbilityFactory.createForUser(user);
+ability.can(Action.Update, article); // true
+
+article.authorId = 2;
+ability.can(Action.Update, article); // false
+
+Как вы можете видеть, экземпляр Ability позволяет нам проверять разрешения довольно читабельным способом.
+Аналогично, AbilityBuilder позволяет нам определять разрешения (и указывать различные условия) аналогичным образом.
+Чтобы найти больше примеров, посетите официальную документацию.
+
+Дополнительно: Реализация PoliciesGuard#
+В этом разделе мы покажем, как создать несколько более сложный защитник, который проверяет, соответствует ли
+пользователь определенным политикам авторизации, которые можно настроить на уровне метода (вы можете расширить его,
+чтобы соблюдать политики, настроенные на уровне класса). В этом примере мы будем использовать пакет CASL только
+для иллюстрации, но использование этой библиотеки не является обязательным. Также мы будем использовать
+поставщик CaslAbilityFactory, который мы создали в предыдущем разделе.
+
+Сначала давайте конкретизируем требования. Цель состоит в том, чтобы предоставить механизм,
+который позволяет указывать проверки политик для каждого обработчика маршрута. Мы будем поддерживать как объекты,
+так и функции (для более простых проверок и для тех, кто предпочитает более функциональный стиль кода).
+
+Начнем с определения интерфейсов для обработчиков политик:
+
+
+import { AppAbility } from '../casl/casl-ability.factory';
+
+interface IPolicyHandler {
+  handle(ability: AppAbility): boolean;
+}
+
+type PolicyHandlerCallback = (ability: AppAbility) => boolean;
+
+export type PolicyHandler = IPolicyHandler | PolicyHandlerCallback;
+
+Как упоминалось выше, мы предоставили два возможных способа определения обработчика политики:
+объект (экземпляр класса, реализующего интерфейс IPolicyHandler) и функция (соответствующая типу PolicyHandlerCallback).
+
+Имея это в наличии, мы можем создать декоратор @CheckPolicies(). Этот декоратор позволяет указать,
+какие политики должны быть соблюдены для доступа к определенным ресурсам.
+
+
+export const CHECK_POLICIES_KEY = 'check_policy';
+export const CheckPolicies = (...handlers: PolicyHandler[]) =>
+  SetMetadata(CHECK_POLICIES_KEY, handlers);
+
+Теперь давайте создадим PoliciesGuard, который будет извлекать и выполнять все обработчики политик,
+привязанные к обработчику маршрута.
+
+
+@Injectable()
+export class PoliciesGuard implements CanActivate {
+  constructor(
+    private reflector: Reflector,
+    private caslAbilityFactory: CaslAbilityFactory,
+  ) {}
+
+  async canActivate(context: ExecutionContext): Promise<boolean> {
+    const policyHandlers =
+      this.reflector.get<PolicyHandler[]>(
+        CHECK_POLICIES_KEY,
+        context.getHandler(),
+      ) || [];
+
+    const { user } = context.switchToHttp().getRequest();
+    const ability = this.caslAbilityFactory.createForUser(user);
+
+    return policyHandlers.every((handler) =>
+      this.execPolicyHandler(handler, ability),
+    );
+  }
+
+  private execPolicyHandler(handler: PolicyHandler, ability: AppAbility) {
+    if (typeof handler === 'function') {
+      return handler(ability);
+    }
+    return handler.handle(ability);
+  }
+}
+
+Подсказка
+В этом примере мы предположили, что request.user содержит экземпляр пользователя. В вашем приложении вы,
+вероятно, создадите эту связь в своем пользовательском защитнике аутентификации — см. главу об аутентификации
+для получения более подробной информации.
+Давайте разберем этот пример. PolicyHandlers — это массив обработчиков, назначенных методу через
+декоратор @CheckPolicies(). Далее мы используем метод CaslAbilityFactory#create, который создает объект Ability,
+позволяя нам проверять, есть ли у пользователя достаточные разрешения для выполнения определенных действий.
+Мы передаем этот объект обработчику политики, который является либо функцией, либо экземпляром класса,
+реализующего IPolicyHandler, предоставляя метод handle(), который возвращает логическое значение.
+Наконец, мы используем метод Array#every, чтобы убедиться, что каждый обработчик возвращает истинное значение.
+
+Наконец, чтобы протестировать этот защитник, привяжите его к любому обработчику маршрута и зарегистрируйте
+встроенный обработчик политики (функциональный подход) следующим образом:
+
+
+@Get()
+@UseGuards(PoliciesGuard)
+@CheckPolicies((ability: AppAbility) => ability.can(Action.Read, Article))
+findAll() {
+  return this.articlesService.findAll();
+}
+
+В качестве альтернативы мы можем определить класс, реализующий интерфейс IPolicyHandler:
+
+export class ReadArticlePolicyHandler implements IPolicyHandler {
+  handle(ability: AppAbility) {
+    return ability.can(Action.Read, Article);
+  }
+}
+
+И используйте его следующим образом:
+
+@Get()
+@UseGuards(PoliciesGuard)
+@CheckPolicies(new ReadArticlePolicyHandler())
+findAll() {
+  return this.articlesService.findAll();
+}
+
+Примечание
+Поскольку мы должны создать экземпляр обработчика политики на месте с помощью ключевого слова new,
+класс ReadArticlePolicyHandler не может использовать внедрение зависимости.
+Это можно решить с помощью метода ModuleRef#get (подробнее здесь https://docs.nestjs.com/fundamentals/module-ref).
+По сути, вместо регистрации функций и экземпляров через декоратор @CheckPolicies() вы должны разрешить
+передачу Type<IPolicyHandler>. Затем внутри вашего сторожа вы можете получить экземпляр с помощью ссылки
+на тип: moduleRef.get(YOUR_HANDLER_TYPE) или даже динамически создать его экземпляр с помощью метода ModuleRef#create.
