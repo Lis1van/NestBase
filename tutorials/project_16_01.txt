@@ -1,0 +1,3230 @@
+Первое, что мы будем делать, — это модуль для пользователя. Модуль нашего пользователя уже есть, но он пустой.
+Мы создадим бизнес-логику для того, чтобы показать, как это должно выглядеть. Давайте начнем с создания методов
+для работы с пользователем: получения данных пользователя, обновления, удаления и других функций.
+
+Запустим проект и проверим, чтобы всё работало. Для работы метода "получить пользователя по ID" нам нужно убедиться,
+что у нас есть необходимые проверки и права доступа. Мы хотим убедиться, что пользователь действительно существует
+и имеет права на выполнение действия. Если пользователь найден, выполняем обновление данных, например, имени или email.
+Добавим метод обновления данных пользователя, который будет возвращать обновленные данные.
+
+Внесем изменения и запустим миграцию для обновления базы данных. Если забыли что-то сделать, можно перезапустить
+приложение и убедиться, что оно работает корректно. Логика удаления также должна учитывать возможные зависимости,
+которые могут возникнуть в базе данных, и обеспечивать корректное каскадное удаление или обновление записей.
+
+Для методов удаления важно понимать, что бывают случаи, когда требуется "мягкое удаление" (soft delete),
+чтобы сохранить записи для возможного восстановления. Используем метод удаления по ID и добавим соответствующую логику,
+чтобы убедиться, что данные обновляются и записываются корректно.
+
+Если метод вызывает ошибки или не работает, как ожидалось, проверяем, есть ли необходимые проверки и декораторы.
+Иногда требуется добавить проверки на уровне контроллера и использовать декораторы для защиты маршрутов.
+Например, проверка токенов и авторизации.
+
+После внесения изменений важно убедиться, что методы возвращают корректные результаты и работают, как задумано.
+Проверяем базу данных, чтобы убедиться, что записи обновляются или удаляются правильно.
+
+Далее нужно подумать о логике связей между пользователями, например, функционале "следования" одного пользователя
+за другим. Создаем дополнительные таблицы для связи пользователей и добавляем проверки, чтобы избежать ошибок.
+
+После создания базовой функциональности можно переходить к более сложным аспектам, таким как детализированные проверки,
+создание и обновление статусов, настройка различных методов взаимодействия с сущностями базы данных и тестирование
+всей логики приложения.
+
+Идем в users.service.ts и доробатываем его
+## Анализ кода `UsersService`
+
+### 1. Исходный код с комментариями
+
+```typescript
+import { ConflictException, Injectable } from '@nestjs/common';
+// Импорт исключения `ConflictException` для обработки конфликтных ситуаций и декоратора `Injectable` для
+обозначения сервиса.
+
+import { UserID } from '../../../common/types/entity-ids.type';
+// Импорт пользовательского типа `UserID`, который, вероятно, определяет тип данных для идентификатора пользователя.
+
+import { UserEntity } from '../../../database/entities/user.entity';
+// Импорт сущности `UserEntity`, представляющей модель пользователя в базе данных.
+
+import { IUserData } from '../../auth/models/interfaces/user-data.interface';
+// Импорт интерфейса `IUserData`, который описывает данные пользователя, передаваемые в методы сервиса.
+
+import { FollowRepository } from '../../repositories/services/follow.repository';
+// Импорт репозитория для управления записями подписок.
+
+import { RefreshTokenRepository } from '../../repositories/services/refresh-token.repository';
+// Импорт репозитория для управления токенами обновления.
+
+import { UserRepository } from '../../repositories/services/user.repository';
+// Импорт репозитория для работы с данными пользователя.
+
+import { UpdateUserReqDto } from '../models/dto/req/update-user.req.dto';
+// Импорт DTO для запроса обновления данных пользователя.
+
+@Injectable()
+// Декоратор `@Injectable()` обозначает, что этот класс может быть внедрен в другие части приложения как зависимость.
+export class UsersService {
+  constructor(
+    private readonly userRepository: UserRepository,
+    private readonly followRepository: FollowRepository,
+    private readonly refreshTokenRepository: RefreshTokenRepository,
+  ) {}
+  // Конструктор класса, принимающий три репозитория для работы с пользователями, подписками и токенами обновления.
+
+  public async findMe(userData: IUserData): Promise<UserEntity> {
+    // Метод для поиска текущего пользователя по данным `userData`.
+    return await this.userRepository.findOneBy({ id: userData.userId });
+    // Используется метод `findOneBy` для получения пользователя по идентификатору.
+  }
+
+  public async updateMe(
+    userData: IUserData,
+    dto: UpdateUserReqDto,
+  ): Promise<UserEntity> {
+    // Метод для обновления данных текущего пользователя.
+    const user = await this.userRepository.findOneBy({ id: userData.userId });
+    // Поиск пользователя в базе данных.
+    this.userRepository.merge(user, dto);
+    // Метод `merge` объединяет данные пользователя с новыми данными из DTO.
+    return await this.userRepository.save(user);
+    // Сохранение обновленных данных пользователя.
+  }
+
+  public async removeMe(userData: IUserData): Promise<void> {
+    // Метод для пометки пользователя как удаленного.
+    await this.userRepository.update(
+      { id: userData.userId },
+      { deleted: new Date() },
+    );
+    // Обновление поля `deleted` для пометки времени удаления.
+    await this.refreshTokenRepository.delete({ user_id: userData.userId });
+    // Удаление всех токенов обновления пользователя.
+  }
+
+  public async findOne(userId: UserID): Promise<UserEntity> {
+    // Метод для поиска одного пользователя по идентификатору.
+    return await this.userRepository.findOneBy({ id: userId });
+  }
+
+  public async follow(userData: IUserData, userId: UserID): Promise<void> {
+    // Метод для подписки на другого пользователя.
+    if (userData.userId === userId) {
+      throw new ConflictException('You cannot follow yourself');
+      // Бросает исключение, если пользователь пытается подписаться на себя.
+    }
+    await this.isUserExistOrThrow(userId);
+    // Проверяет существование пользователя.
+
+    const follow = await this.followRepository.findOneBy({
+      follower_id: userData.userId,
+      following_id: userId,
+    });
+    // Проверяет, существует ли уже подписка.
+
+    if (follow) {
+      throw new ConflictException('You already follow this user');
+      // Бросает исключение, если подписка уже существует.
+    }
+    await this.followRepository.save(
+      this.followRepository.create({
+        follower_id: userData.userId,
+        following_id: userId,
+      }),
+    );
+    // Создает и сохраняет новую запись подписки.
+  }
+
+  public async unfollow(userData: IUserData, userId: UserID): Promise<void> {
+    // Метод для отписки от пользователя.
+    if (userData.userId === userId) {
+      throw new ConflictException('You cannot unfollow yourself');
+      // Бросает исключение, если пользователь пытается отписаться от себя.
+    }
+    await this.isUserExistOrThrow(userId);
+    // Проверяет существование пользователя.
+
+    const follow = await this.followRepository.findOneBy({
+      follower_id: userData.userId,
+      following_id: userId,
+    });
+    // Проверяет наличие подписки.
+
+    if (!follow) {
+      throw new ConflictException('You do not follow this user');
+      // Бросает исключение, если подписки нет.
+    }
+    await this.followRepository.delete({
+      follower_id: userData.userId,
+      following_id: userId,
+    });
+    // Удаляет запись подписки.
+  }
+
+  private async isUserExistOrThrow(userId: UserID): Promise<void> {
+    // Приватный метод для проверки существования пользователя.
+    const user = await this.userRepository.findOneBy({ id: userId });
+    if (!user) {
+      throw new ConflictException('User not found');
+      // Бросает исключение, если пользователь не найден.
+    }
+  }
+}
+```
+
+### 2. Детальный разбор
+#### Общий обзор:
+- **Назначение**: `UsersService` обеспечивает обработку операций с пользователями, включая обновление данных,
+подписку и отписку.
+- **Место в архитектуре**: Сервис является слоем бизнес-логики в приложении, взаимодействующим с репозиториями данных.
+- **Взаимодействие**: Работает с сущностями и DTO, полученными из базы данных, и с данными, поступающими от контроллеров.
+
+#### Построчный анализ:
+- **Импорты**: Подключение базовых компонентов и типов из различных частей проекта, включая `@nestjs/common` для
+работы с зависимостями и обработкой исключений.
+- **Конструктор**: Зависимости `UserRepository`, `FollowRepository`, `RefreshTokenRepository` внедряются для работы
+с базой данных.
+
+#### Методы:
+- `findMe`, `updateMe`, `removeMe`: Позволяют текущему пользователю управлять своими данными.
+- `follow`, `unfollow`: Обрабатывают логику подписки и отписки с проверкой конфликтных условий.
+- `isUserExistOrThrow`: Обеспечивает валидацию существования пользователя.
+
+### 3. Возможности расширения
+- **Добавление логирования**: Использование встроенного сервиса `Logger` NestJS для отслеживания событий.
+- **Оптимизация методов**: Например, метод `updateMe` может быть расширен для управления частичными обновлениями
+с использованием `QueryBuilder`.
+- **Расширение DTO**: Добавление дополнительных полей для расширенного контроля за обновлением данных.
+
+### 4. Рекомендации по улучшению
+- **Производительность**: Добавить кеширование для методов поиска (`findMe`, `findOne`), что ускорит работу при
+множественных вызовах.
+- **Безопасность**: Внедрить защиту от атак типа "отказ в обслуживании", ограничив частоту вызовов методов.
+- **Масштабируемость**: Использовать `EventEmitter` для обработки подписок и отписок асинхронно.
+- **Тестируемость**: Написать модульные тесты с использованием `Jest` для проверки поведения методов.
+
+### 5. Примеры использования
+- **Базовое использование**:
+  ```typescript
+  const userEntity = await usersService.findMe({ userId: '123' });
+  console.log(userEntity);
+  ```
+
+- **Расширенные сценарии**:
+  ```typescript
+  try {
+    await usersService.follow({ userId: '123' }, '456');
+  } catch (error) {
+    console.error('Error:', error.message);
+  }
+  ```
+
+- **Обработка ошибок**:
+  Исключения типа `ConflictException` могут быть обработаны с помощью глобальных фильтров.
+
+- **Тестирование**:
+  ```typescript
+  it('should follow another user successfully', async () => {
+    jest.spyOn(userRepository, 'findOneBy').mockResolvedValue(mockUserEntity);
+    jest.spyOn(followRepository, 'findOneBy').mockResolvedValue(null);
+    await expect(usersService.follow({ userId: '123' }, '456')).resolves.not.toThrow();
+  });
+  ```
+
+## Заключение
+`UsersService` эффективно выполняет функции управления пользователями и их взаимодействиями.
+Однако, есть возможности для улучшений в производительности, масштабируемости и тестировании.
+----------
+
+Доробатываем users.controller.ts
+## Анализ кода UsersController
+
+### 1. Исходный код с комментариями
+```typescript
+// Импорты модулей и декораторов NestJS, а также других компонентов приложения.
+import {
+  Body, // Декоратор для извлечения тела запроса.
+  Controller, // Декоратор для создания контроллера.
+  Delete, // Декоратор для обработки DELETE-запросов.
+  Get, // Декоратор для обработки GET-запросов.
+  Param, // Декоратор для извлечения параметров из запроса.
+  ParseUUIDPipe, // Пайп для валидации и преобразования UUID.
+  Patch, // Декоратор для обработки PATCH-запросов.
+  Post, // Декоратор для обработки POST-запросов.
+} from '@nestjs/common';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger'; // Декораторы для описания API-документации с
+использованием Swagger.
+
+// Импорты внутренних типов и интерфейсов.
+import { UserID } from '../../common/types/entity-ids.type';
+import { CurrentUser } from '../auth/decorators/current-user.decorator'; // Кастомный декоратор для получения текущего пользователя.
+import { SkipAuth } from '../auth/decorators/skip-auth.decorator'; // Кастомный декоратор для пропуска аутентификации.
+import { IUserData } from '../auth/models/interfaces/user-data.interface';
+import { UpdateUserReqDto } from './models/dto/req/update-user.req.dto'; // DTO для обновления данных пользователя.
+import { UserBaseResDto } from './models/dto/res/user-base.res.dto'; // DTO для ответа с базовыми данными пользователя.
+import { UserMapper } from './services/user.mapper'; // Сервис для преобразования сущностей пользователя в DTO.
+import { UsersService } from './services/users.service'; // Сервис для работы с пользователями.
+
+@ApiTags('Users') // Декоратор для добавления тэга Swagger для этого контроллера.
+@Controller('users') // Определение маршрута контроллера.
+export class UsersController {
+  constructor(private readonly usersService: UsersService) {} // Внедрение сервиса UsersService через конструктор.
+
+  @ApiBearerAuth() // Указывает, что для доступа к этому маршруту необходима авторизация.
+  @Get('me') // Обработка GET-запросов на маршрут /users/me.
+  public async findMe(@CurrentUser() userData: IUserData) {
+    // Получение текущего пользователя с использованием кастомного декоратора.
+    const result = await this.usersService.findMe(userData);
+    // Возврат данных пользователя в формате DTO.
+    return UserMapper.toResDto(result);
+  }
+
+  @ApiBearerAuth()
+  @Patch('me') // Обработка PATCH-запросов на маршрут /users/me.
+  public async updateMe(
+    @CurrentUser() userData: IUserData,
+    @Body() updateUserDto: UpdateUserReqDto, // Извлечение данных из тела запроса.
+  ) {
+    const result = await this.usersService.updateMe(userData, updateUserDto);
+    return UserMapper.toResDto(result); // Возврат обновленных данных пользователя.
+  }
+
+  @ApiBearerAuth()
+  @Delete('me') // Обработка DELETE-запросов на маршрут /users/me.
+  public async removeMe(@CurrentUser() userData: IUserData): Promise<void> {
+    await this.usersService.removeMe(userData); // Удаление текущего пользователя.
+  }
+
+  @SkipAuth() // Указывает, что аутентификация не требуется.
+  @Get(':userId') // Обработка GET-запросов с параметром userId.
+  public async findOne(
+    @Param('userId', ParseUUIDPipe) userId: UserID, // Валидация и извлечение параметра userId.
+  ): Promise<UserBaseResDto> {
+    const result = await this.usersService.findOne(userId);
+    return UserMapper.toResDto(result); // Возврат найденного пользователя.
+  }
+
+  @ApiBearerAuth()
+  @Post(':userId/follow') // Обработка POST-запросов на маршрут /users/:userId/follow.
+  public async follow(
+    @Param('userId', ParseUUIDPipe) userId: UserID,
+    @CurrentUser() userData: IUserData,
+  ): Promise<void> {
+    await this.usersService.follow(userData, userId); // Выполнение логики подписки на пользователя.
+  }
+
+  @ApiBearerAuth()
+  @Delete(':userId/follow') // Обработка DELETE-запросов на маршрут /users/:userId/follow.
+  public async unfollow(
+    @Param('userId', ParseUUIDPipe) userId: UserID,
+    @CurrentUser() userData: IUserData,
+  ): Promise<void> {
+    await this.usersService.unfollow(userData, userId); // Выполнение логики отписки от пользователя.
+  }
+}
+```
+
+### 2. Детальный разбор
+#### Обзор кода
+- **Назначение:** Контроллер предназначен для управления пользователями в приложении. Он обрабатывает запросы,
+связанные с получением данных пользователя, обновлением, удалением и взаимодействием с функциями
+подписки (follow/unfollow).
+- **Архитектурная роль:** UsersController отвечает за маршрутизацию и контроль доступа к методам `UsersService`,
+предоставляя слой между HTTP-запросами и логикой бизнес-слоя.
+- **Взаимодействие:** Использует кастомные декораторы (`CurrentUser`, `SkipAuth`), DTO, сервисы (`UsersService`),
+и мапперы (`UserMapper`) для обработки и формирования ответа.
+
+#### Строки кода
+- **`import ...` блоки:** Импорты модулей и компонентов из NestJS и внутренние импорты проекта.
+Позволяют контроллеру использовать декораторы, сервисы и DTO. Подробнее: [NestJS Controllers](https://docs.nestjs.com/controllers).
+- **`@Controller('users')`**: Определяет маршрут для всех методов этого контроллера.
+Любые запросы будут начинаться с `/users`.
+- **Методы с `@Get`, `@Patch`, `@Delete`, `@Post`**: Указывают HTTP-методы для маршрутов.
+Декораторы типа `@Param` и `@Body` позволяют извлекать параметры и тело запроса.
+- **`ParseUUIDPipe`**: Пайп NestJS для валидации параметров, обеспечивая, что `userId` — валидный UUID.
+
+### 3. Возможности расширения кода
+- **Логгирование действий пользователей:** Можно добавить Middleware или Interceptor для логгирования вызовов контроллера.
+- **Аудит и отслеживание изменений:** Добавить функциональность для сохранения истории изменений пользователя.
+- **Настройка ответа:** Добавить кастомизацию ответов для более гибкого управления выводом данных.
+
+### 4. Рекомендации по улучшению
+- **Добавление логирования и мониторинга:** Включить `Logger` или использовать сторонние сервисы
+мониторинга (например, Sentry) для отслеживания ошибок и производительности.
+- **Модульная тестируемость:** Написать модульные тесты с использованием `@nestjs/testing`.
+- **Читаемость и типизация:** Убедиться, что все используемые DTO строго типизированы для лучшей читаемости
+и валидации данных.
+
+### 5. Примеры использования
+#### Базовое использование
+```bash
+# Получение текущего пользователя
+GET /users/me
+
+# Обновление данных текущего пользователя
+PATCH /users/me
+Body: { "name": "New Name" }
+
+# Удаление текущего пользователя
+DELETE /users/me
+
+# Подписка на пользователя
+POST /users/{userId}/follow
+
+# Отписка от пользователя
+DELETE /users/{userId}/follow
+```
+
+#### Тестирование
+Использовать `Supertest` или `Jest` для тестирования контроллера и методов:
+```typescript
+it('should return current user', async () => {
+  const response = await request(app.getHttpServer())
+    .get('/users/me')
+    .set('Authorization', `Bearer ${token}`);
+  expect(response.status).toBe(200);
+});
+```
+
+### Заключение
+Контроллер `UsersController` организован и хорошо структурирован, что обеспечивает легкость интеграции с
+другими компонентами NestJS. Однако его можно улучшить за счет добавления расширенной обработки ошибок и логирования.
+----------------
+
+Далее обновим user.entity.ts
+## Анализ кода `UserEntity`
+
+### 1. Исходный код с комментариями
+
+```typescript
+import { Column, Entity, OneToMany, PrimaryGeneratedColumn } from 'typeorm'; // Импорты основных декораторов и
+типов из TypeORM для создания сущностей.
+
+import { UserID } from '../../common/types/entity-ids.type'; // Импорт типа для идентификатора пользователя.
+import { ArticleEntity } from './article.entity'; // Импорт сущности статьи, связываемой с пользователем.
+import { CommentEntity } from './comment.entity'; // Импорт сущности комментария.
+import { TableNameEnum } from './enums/table-name.enum'; // Импорт перечисления, содержащего имена таблиц.
+import { FollowEntity } from './follow.entity'; // Импорт сущности для хранения информации о подписках.
+import { LikeEntity } from './like.entity'; // Импорт сущности лайков.
+import { CreateUpdateModel } from './models/create-update.model'; // Импорт базовой модели с полями создания и обновления.
+import { RefreshTokenEntity } from './refresh-token.entity'; // Импорт сущности токенов обновления.
+
+@Entity(TableNameEnum.USERS) // Декоратор для определения, что класс является сущностью и связана с таблицей 'users'.
+export class UserEntity extends CreateUpdateModel {
+  @PrimaryGeneratedColumn('uuid') // Декоратор для создания уникального идентификатора типа UUID.
+  id: UserID;
+
+  @Column('text') // Колонка типа text для хранения имени пользователя.
+  name: string;
+
+  @Column('text', { unique: true }) // Уникальная колонка для хранения email.
+  email: string;
+
+  @Column('text', { select: false }) // Колонка для хранения пароля, исключённая из выборок по умолчанию (безопасность).
+  password: string;
+
+  @Column('boolean', { default: true }) // Булевая колонка с значением по умолчанию true для обозначения
+  активности пользователя.
+  isActive: boolean;
+
+  @Column('text', { nullable: true }) // Колонка для биографии пользователя, допускающая null.
+  bio: string;
+
+  @Column('text', { nullable: true }) // Колонка для изображения профиля пользователя, допускающая null.
+  image: string;
+
+  @Column('timestamp', { nullable: true }) // Колонка с временной меткой для хранения даты удаления аккаунта.
+  deleted?: Date;
+
+  @OneToMany(() => RefreshTokenEntity, (entity) => entity.user) // Связь "один ко многим" с сущностью токенов обновления.
+  refreshTokens?: RefreshTokenEntity[];
+
+  @OneToMany(() => ArticleEntity, (entity) => entity.user) // Связь "один ко многим" с сущностью статей.
+  articles?: ArticleEntity[];
+
+  @OneToMany(() => LikeEntity, (entity) => entity.user) // Связь "один ко многим" с сущностью лайков.
+  likes?: LikeEntity[];
+
+  @OneToMany(() => CommentEntity, (entity) => entity.user) // Связь "один ко многим" с сущностью комментариев.
+  comments?: CommentEntity[];
+
+  @OneToMany(() => FollowEntity, (entity) => entity.follower) // Связь "один ко многим" с сущностью подписок (подписчики).
+  followers?: FollowEntity[];
+
+  @OneToMany(() => FollowEntity, (entity) => entity.following) // Связь "один ко многим" с сущностью
+  подписок (следуемые пользователи).
+  followings?: FollowEntity[];
+}
+```
+
+### 2. Детальный разбор
+
+1. **Импорты**: Все импорты используют декораторы и классы TypeORM, а также модели и типы, определённые в проекте.
+   - `PrimaryGeneratedColumn`, `Column`, `Entity`, `OneToMany`: декораторы TypeORM для объявления сущностей и их колонок.
+   - Ссылки: [TypeORM Decorators](https://typeorm.io/entities).
+
+2. **Аннотация `@Entity`**:
+   - Объявляет класс `UserEntity` как сущность, привязанную к таблице, имя которой указано в `TableNameEnum.USERS`.
+   - Устанавливает имя таблицы через использование перечисления для большей читаемости.
+
+3. **Поле `id` с `@PrimaryGeneratedColumn('uuid')`**:
+   - Генерирует уникальный идентификатор типа UUID автоматически при создании записи.
+
+4. **Колонки**:
+   - Поля, такие как `name`, `email`, `password`, имеют тип `text`, что даёт большую гибкость в хранении данных.
+   - `password`: атрибут `select: false` исключает поле из выборок по умолчанию, что важно для безопасности.
+   - `isActive`, `bio`, `image`, `deleted`: простые булевые и текстовые колонки с разными настройками по умолчанию.
+
+5. **Связи `@OneToMany`**:
+   - Обозначают отношение "один ко многим", связывающее пользователя с его статьями, комментариями,
+   токенами обновления и т.д.
+   - Указывают на то, что соответствующие поля (например, `articles`) будут массивами сущностей,
+   связанных с данным пользователем.
+
+### 3. Возможности расширения кода
+
+- **Дополнительные параметры в декораторах**:
+  - Например, `@Column()` можно дополнить параметрами `default`, `length`, чтобы указать длину строки или
+  дефолтные значения.
+  - Добавление индексов через `@Index()` для полей, используемых в фильтрах, может ускорить выборку.
+
+- **Связи**:
+  - Можно добавить параметры, такие как `eager: true` для автоматической подгрузки связанных сущностей.
+
+### 4. Рекомендации по улучшению
+
+- **Безопасность**: Поле `password` исключено из выборок, что хорошо для безопасности, но стоит дополнить
+проект шифрованием пароля через хук `beforeInsert`.
+- **Производительность**: Добавление индексов и использование ленивой загрузки (`lazy: true`) для связей
+может оптимизировать работу с данными.
+- **Масштабируемость**: Если сущности будут расти, рекомендуется использовать модули для разделения кода по доменам.
+
+### 5. Примеры использования
+
+#### Базовое использование
+
+**Создание пользователя**:
+```typescript
+const user = new UserEntity();
+user.name = 'John Doe';
+user.email = 'johndoe@example.com';
+user.password = 'hashed_password';
+user.isActive = true;
+// Сохранение в базе данных через репозиторий
+await userRepository.save(user);
+```
+
+**Получение пользователя с его статьями**:
+```typescript
+const userWithArticles = await userRepository.findOne({
+  where: { id: 'some-uuid' },
+  relations: ['articles'], // Подгрузка связанных статей
+});
+console.log(userWithArticles);
+```
+
+#### Расширенные сценарии
+
+**Проверка наличия подписчиков и подписок**:
+```typescript
+const userWithFollows = await userRepository.findOne({
+  where: { id: 'some-uuid' },
+  relations: ['followers', 'followings'],
+});
+
+if (userWithFollows?.followers?.length) {
+  console.log(`User has ${userWithFollows.followers.length} followers.`);
+}
+```
+
+**Добавление логики для ленивой загрузки**:
+Если производительность важна и вам не нужно подгружать все связи, можно использовать `@OneToMany` с `lazy: true`,
+чтобы загружать данные только при необходимости.
+
+**Использование хуков для безопасности**:
+```typescript
+import { BeforeInsert, BeforeUpdate } from 'typeorm';
+import * as bcrypt from 'bcrypt';
+
+@Entity(TableNameEnum.USERS)
+export class UserEntity extends CreateUpdateModel {
+  // Другие поля
+
+  @BeforeInsert()
+  @BeforeUpdate()
+  async hashPassword() {
+    if (this.password) {
+      this.password = await bcrypt.hash(this.password, 10);
+    }
+  }
+}
+```
+
+#### Обработка ошибок
+
+**Проверка уникальности email**:
+Если попытка сохранить пользователя с уже существующим email вызывает ошибку, её можно обработать следующим образом:
+```typescript
+try {
+  await userRepository.save(user);
+} catch (error) {
+  if (error.code === '23505') { // код ошибки уникальности для PostgreSQL
+    console.error('Email already exists');
+  }
+}
+```
+
+**Обработка ошибок при подгрузке данных**:
+Можно использовать методы и опции для graceful degradation, если связанные данные отсутствуют:
+```typescript
+const user = await userRepository.findOne({ id: 'some-uuid' });
+if (!user) {
+  throw new Error('User not found');
+}
+```
+
+#### Тестирование
+
+**Тестирование методов создания и получения данных**:
+```typescript
+import { Test } from '@nestjs/testing';
+import { getRepositoryToken } from '@nestjs/typeorm';
+import { UserEntity } from './user.entity';
+import { Repository } from 'typeorm';
+
+describe('UserEntity', () => {
+  let userRepository: Repository<UserEntity>;
+
+  beforeEach(async () => {
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        {
+          provide: getRepositoryToken(UserEntity),
+          useClass: Repository,
+        },
+      ],
+    }).compile();
+
+    userRepository = moduleRef.get<Repository<UserEntity>>(getRepositoryToken(UserEntity));
+  });
+
+  it('should create and save a user', async () => {
+    const user = new UserEntity();
+    user.name = 'Jane Doe';
+    user.email = 'janedoe@example.com';
+    user.password = 'hashed_password';
+    const savedUser = await userRepository.save(user);
+
+    expect(savedUser).toBeDefined();
+    expect(savedUser.id).toBeDefined();
+  });
+});
+```
+
+### Заключение
+Этот анализ кода сущности `UserEntity` показывает её роль в проекте, тесную связь с другими таблицами,
+а также возможности для улучшения и масштабирования. Добавление хуков безопасности, индексов и использование
+опций загрузки для оптимизации работы с базой данных помогут сделать приложение более защищённым и производительным.
+------------
+
+Делаем новую миграцию npm run migration:generate -name=apdate-table-entity
+
+Проверяем работоспособность в swagger. Создаем второго юзера POST auth/register копируем его ID идем на
+ендпоинт POST users/{userId}/follow нажимаем на Try it out вставляем скопированый ID  в поле userID и нажимаем на Execute.
+Проверяем базу данных , в таблице follow должна появится запись.
+----------
+
+Обновим auth.service.ts
+## Анализ кода AuthService
+
+### 1. Исходный код с комментариями
+```typescript
+import { Injectable, UnauthorizedException } from '@nestjs/common'; // Импорты модулей NestJS для создания
+сервисов и обработки ошибок
+import * as bcrypt from 'bcrypt'; // Импорт библиотеки bcrypt для хэширования и проверки паролей
+
+import { RefreshTokenRepository } from '../../repositories/services/refresh-token.repository'; // Репозиторий для
+работы с токенами обновления
+import { UserRepository } from '../../repositories/services/user.repository'; // Репозиторий для работы с пользователями
+import { UserMapper } from '../../users/services/user.mapper'; // Маппер для преобразования сущностей UserEntity в DTO
+import { LoginReqDto } from '../models/dto/req/login.req.dto'; // DTO для входных данных при входе пользователя
+import { RegistrationReqDto } from '../models/dto/req/registration.req.dto'; // DTO для входных данных при
+регистрации пользователя
+import { AuthResDto } from '../models/dto/res/auth.res.dto'; // DTO для ответа при успешной аутентификации
+import { TokenPairResDto } from '../models/dto/res/token-pair.res.dto'; // DTO для пары токенов
+import { IUserData } from '../models/interfaces/user-data.interface'; // Интерфейс для передачи данных о пользователе
+import { AuthCacheService } from './auth-cache-service'; // Сервис для работы с кешем авторизационных данных
+import { TokenService } from './token.service'; // Сервис для генерации токенов
+
+@Injectable() // Декоратор, определяющий, что AuthService является провайдером и может инжектироваться в другие
+компоненты
+export class AuthService {
+  constructor(
+    private readonly authCacheService: AuthCacheService, // Инжекция зависимостей через конструктор
+    private readonly tokenService: TokenService,
+    private readonly userRepository: UserRepository,
+    private readonly refreshTokenRepository: RefreshTokenRepository,
+  ) {}
+
+  // Метод для регистрации нового пользователя
+  public async registration(dto: RegistrationReqDto): Promise<AuthResDto> {
+    await this.isEmailNotExistOrThrow(dto.email); // Проверка уникальности email, выброс ошибки при его наличии
+    const password = await bcrypt.hash(dto.password, 10); // Хэширование пароля с использованием соли в 10 раундов
+    const user = await this.userRepository.save( // Сохранение нового пользователя в базе данных
+      this.userRepository.create({ ...dto, password }),
+    );
+    const tokens = await this.tokenService.generateAuthTokens({ // Генерация пары токенов для пользователя
+      userId: user.id,
+      deviceId: dto.deviceId,
+    });
+    await Promise.all([ // Параллельное сохранение данных в кеш и в репозиторий токенов
+      this.authCacheService.saveToken(
+        tokens.accessToken,
+        user.id,
+        dto.deviceId,
+      ),
+      this.refreshTokenRepository.save(
+        this.refreshTokenRepository.create({
+          user_id: user.id,
+          deviceId: dto.deviceId,
+          refreshToken: tokens.refreshToken,
+        }),
+      ),
+    ]);
+
+    return { user: UserMapper.toResDto(user), tokens }; // Возврат объекта с DTO пользователя и токенами
+  }
+
+  // Метод для входа пользователя
+  public async login(dto: LoginReqDto): Promise<AuthResDto> {
+    const user = await this.userRepository.findOne({ // Поиск пользователя по email с выборкой пароля
+      where: { email: dto.email },
+      select: ['id', 'password'],
+    });
+    if (!user) {
+      throw new UnauthorizedException(); // Исключение, если пользователь не найден
+    }
+    const isPasswordValid = await bcrypt.compare(dto.password, user.password); // Сравнение введенного пароля с хэшем
+    if (!isPasswordValid) {
+      throw new UnauthorizedException(); // Исключение при неверном пароле
+    }
+
+    const tokens = await this.tokenService.generateAuthTokens({ // Генерация новых токенов при успешной аутентификации
+      userId: user.id,
+      deviceId: dto.deviceId,
+    });
+    await Promise.all([
+      this.authCacheService.saveToken(
+        tokens.accessToken,
+        user.id,
+        dto.deviceId,
+      ),
+      this.refreshTokenRepository.save(
+        this.refreshTokenRepository.create({
+          user_id: user.id,
+          deviceId: dto.deviceId,
+          refreshToken: tokens.refreshToken,
+        }),
+      ),
+    ]);
+    const userEntity = await this.userRepository.findOneBy({ id: user.id }); // Поиск полной информации о пользователе
+
+    return { user: UserMapper.toResDto(userEntity), tokens }; // Возврат объекта с информацией о пользователе и токенами
+  }
+
+  // Метод для выхода пользователя
+  public async logOut(userData: IUserData): Promise<void> {
+    await Promise.all([ // Параллельное удаление токенов из кеша и базы данных
+      this.authCacheService.deleteToken(userData.userId, userData.deviceId),
+      this.refreshTokenRepository.delete({
+        user_id: userData.userId,
+        deviceId: userData.deviceId,
+      }),
+    ]);
+  }
+
+  // Метод для обновления токенов
+  public async refresh(userData: IUserData): Promise<TokenPairResDto> {
+    await Promise.all([ // Удаление старых токенов
+      this.authCacheService.deleteToken(userData.userId, userData.deviceId),
+      this.refreshTokenRepository.delete({
+        user_id: userData.userId,
+        deviceId: userData.deviceId,
+      }),
+    ]);
+
+    const tokens = await this.tokenService.generateAuthTokens({ // Генерация новой пары токенов
+      userId: userData.userId,
+      deviceId: userData.deviceId,
+    });
+    await Promise.all([ // Сохранение новой пары токенов
+      this.authCacheService.saveToken(
+        tokens.accessToken,
+        userData.userId,
+        userData.deviceId,
+      ),
+      this.refreshTokenRepository.save(
+        this.refreshTokenRepository.create({
+          user_id: userData.userId,
+          deviceId: userData.deviceId,
+          refreshToken: tokens.refreshToken,
+        }),
+      ),
+    ]);
+
+    return tokens; // Возврат новой пары токенов
+  }
+
+  // Вспомогательный метод для проверки уникальности email
+  private async isEmailNotExistOrThrow(email: string) {
+    const user = await this.userRepository.findOneBy({ email });
+    if (user) {
+      throw new Error('Email already exists'); // Исключение при наличии пользователя с таким email
+    }
+  }
+}
+```
+
+### 2. Детальный разбор
+**Зависимости**:
+- `AuthCacheService`, `TokenService`, `UserRepository`, `RefreshTokenRepository`: Зависимости, используемые
+для работы с кешем, токенами и базой данных.
+- `bcrypt`: Внешняя библиотека для хэширования и сравнения паролей.
+
+**Методы**:
+- `registration()`: Регистрация нового пользователя, создание токенов, сохранение в базе данных.
+- `login()`: Вход пользователя, проверка пароля, генерация токенов.
+- `logOut()`: Удаление данных о токенах.
+- `refresh()`: Обновление токенов.
+- `isEmailNotExistOrThrow()`: Проверка уникальности email.
+
+### 3. Возможности расширения
+- Добавление двухфакторной аутентификации.
+- Включение ограничения частоты запросов (rate limiting) для защиты от брутфорс-атак.
+- Логирование попыток входа и выхода для аудита.
+
+### 4. Рекомендации по улучшению
+- **Безопасность**: Хранение количества попыток входа с блокировкой при их превышении.
+- **Производительность**: Оптимизация запросов через индексацию полей в базе данных.
+- **Читаемость**: Использование декораторов для проверки прав доступа.
+
+### 5. Примеры использования
+**Базовый пример входа пользователя**:
+```typescript
+const loginDto: LoginReqDto = {
+  email: 'user@example.com',
+  password: 'strong_password',
+  deviceId: 'device123',
+};
+try {
+  const authResponse = await authService.login(loginDto);
+  console.log(authResponse);
+} catch (error) {
+  if (error instanceof UnauthorizedException) {
+    console.error('Неверный логин или пароль');
+  } else {
+    console.error('Произошла ошибка:', error.message);
+  }
+}
+```
+
+**Пример использования метода `logOut`**:
+```typescript
+const userData: IUserData = {
+  userId: 'user-id-123',
+  deviceId: 'device123',
+};
+await authService.logOut(userData);
+console.log('Пользователь успешно вышел из системы');
+```
+
+**Пример обновления токенов**:
+```typescript
+const userData: IUserData = {
+  userId: 'user-id-123',
+  deviceId: 'device123',
+};
+try {
+  const newTokens = await authService.refresh(userData);
+  console.log('Новые токены:', newTokens);
+} catch (error) {
+  console.error('Ошибка при обновлении токенов:', error.message);
+}
+```
+
+### Обработка ошибок и тестирование
+
+**Обработка ошибок**:
+- Методы выбрасывают `UnauthorizedException`, если проверка пользователя или пароля не проходит.
+- В случае регистрации используется `Error` для проверки уникальности email, что можно улучшить,
+используя специфические исключения, такие как `ConflictException`, для лучшей читаемости.
+
+**Тестирование**:
+- Для тестирования методов можно использовать `@nestjs/testing` для создания тестовых модулей и имитации зависимостей.
+- Пример теста с использованием Jest:
+```typescript
+describe('AuthService', () => {
+  let authService: AuthService;
+  let userRepository: UserRepository;
+  let tokenService: TokenService;
+
+  beforeEach(async () => {
+    const moduleRef = await Test.createTestingModule({
+      providers: [
+        AuthService,
+        {
+          provide: UserRepository,
+          useValue: {
+            findOne: jest.fn(),
+            save: jest.fn(),
+            create: jest.fn(),
+          },
+        },
+        {
+          provide: TokenService,
+          useValue: {
+            generateAuthTokens: jest.fn(),
+          },
+        },
+      ],
+    }).compile();
+
+    authService = moduleRef.get<AuthService>(AuthService);
+    userRepository = moduleRef.get<UserRepository>(UserRepository);
+    tokenService = moduleRef.get<TokenService>(TokenService);
+  });
+
+  it('должен зарегистрировать нового пользователя', async () => {
+    jest.spyOn(userRepository, 'findOne').mockResolvedValue(null);
+    jest.spyOn(userRepository, 'save').mockResolvedValue({ id: 'user-id-123' });
+    jest.spyOn(tokenService, 'generateAuthTokens').mockResolvedValue({
+      accessToken: 'access-token',
+      refreshToken: 'refresh-token',
+    });
+
+    const registrationDto: RegistrationReqDto = {
+      email: 'test@example.com',
+      password: 'password',
+      deviceId: 'device123',
+    };
+
+    const result = await authService.registration(registrationDto);
+    expect(result).toHaveProperty('tokens');
+    expect(result.user).toBeDefined();
+  });
+});
+```
+
+### Дополнительные замечания
+
+- **Лучшие практики**: Использование DTO и мапперов улучшает читаемость кода и делает его более структурированным.
+- **Потенциальные проблемы**: Хранение паролей должно использовать надежные методы хэширования.
+Использование библиотеки `bcrypt` с достаточной солью является безопасным, но рекомендуется следить за
+обновлениями и использовать проверенные версии.
+
+### Ссылки на документацию
+- [NestJS Providers](https://docs.nestjs.com/providers)
+- [Handling exceptions](https://docs.nestjs.com/exception-filters)
+- [Using bcrypt](https://www.npmjs.com/package/bcrypt)
+- [NestJS Testing](https://docs.nestjs.com/fundamentals/testing)
+
+Этот разбор дает полный обзор того, как работает код `AuthService`, с акцентом на его функции, расширение,
+улучшение и тестирование.
+------------
+
+Обновим jwt-access.guard.ts
+## Анализ кода `JwtAccessGuard`
+
+### 1. Исходный код с комментариями
+```typescript
+import {
+  CanActivate, // Интерфейс для создания кастомных Guard'ов
+  ExecutionContext, // Контекст выполнения, предоставляющий информацию о текущем выполнении
+  Injectable, // Декоратор для объявления класса, как провайдера
+  UnauthorizedException, // Исключение, выбрасываемое при неавторизованном доступе
+} from '@nestjs/common';
+import { Reflector } from '@nestjs/core'; // Сервис для работы с метаданными
+import { IsNull } from 'typeorm'; // Утилита TypeORM для работы с null значениями
+
+import { UserRepository } from '../../repositories/services/user.repository'; // Репозиторий для работы с
+пользователями
+import { UserMapper } from '../../users/services/user.mapper'; // Сервис для маппинга сущностей пользователя
+import { SKIP_AUTH } from '../decorators/skip-auth.decorator'; // Кастомный декоратор для пропуска аутентификации
+import { TokenType } from '../models/enums/token-type.enum'; // Enum, определяющий типы токенов
+import { AuthCacheService } from '../services/auth-cache-service'; // Сервис для работы с кешем авторизации
+import { TokenService } from '../services/token.service'; // Сервис для работы с токенами
+
+@Injectable() // Декоратор, объявляющий класс как провайдер
+export class JwtAccessGuard implements CanActivate { // Реализация интерфейса CanActivate для создания Guard'а
+  constructor(
+    private readonly reflector: Reflector, // Инъекция Reflector для работы с метаданными
+    private readonly tokenService: TokenService, // Инъекция сервиса для работы с токенами
+    private readonly authCacheService: AuthCacheService, // Инъекция кеш-сервиса для проверки токенов
+    private readonly userRepository: UserRepository, // Инъекция репозитория пользователей
+  ) {}
+
+  // Основной метод Guard'а, определяющий, можно ли активировать маршрут
+  async canActivate(context: ExecutionContext): Promise<boolean> {
+    const skipAuth = this.reflector.getAllAndOverride<boolean>(SKIP_AUTH, [
+      context.getHandler(), // Получение метаданных для обработчика (метода)
+      context.getClass(), // Получение метаданных для класса (контроллера)
+    ]);
+    if (skipAuth) return true; // Если метаданные пропускают аутентификацию, возвращаем true
+
+    const request = context.switchToHttp().getRequest(); // Получение запроса из контекста
+    const accessToken = request.get('Authorization')?.split('Bearer ')[1]; // Извлечение токена из
+    заголовка Authorization
+    if (!accessToken) {
+      throw new UnauthorizedException(); // Исключение при отсутствии токена
+    }
+    const payload = await this.tokenService.verifyToken(
+      accessToken,
+      TokenType.ACCESS, // Проверка токена как токена доступа
+    );
+    if (!payload) {
+      throw new UnauthorizedException(); // Исключение при недействительном токене
+    }
+    const isAccessTokenExist = await this.authCacheService.isAccessTokenExist(
+      payload.userId,
+      payload.deviceId,
+      accessToken, // Проверка существования токена в кеше
+    );
+    if (!isAccessTokenExist) {
+      throw new UnauthorizedException(); // Исключение при отсутствии токена в кеше
+    }
+    const user = await this.userRepository.findOneBy({
+      id: payload.userId, // Поиск пользователя по идентификатору
+      deleted: IsNull(), // Условие для проверки, что пользователь не удален
+    });
+    if (!user) {
+      throw new UnauthorizedException(); // Исключение при отсутствии пользователя
+    }
+
+    request.res.locals.user = UserMapper.toIUserData(user, payload); // Привязка данных пользователя к объекту запроса
+    return true; // Разрешение активации маршрута
+  }
+}
+```
+
+### 2. Детальный разбор
+#### Строки 1-14: Импорты
+- **Назначение**: Импорты библиотек и локальных компонентов, необходимых для работы `JwtAccessGuard`.
+- **Технический аспект**: Эти импорты используются для создания guard'а, проверки токенов и работы с пользователями.
+- **Связь с NestJS**: Используются основные инструменты NestJS, такие как `CanActivate`, `ExecutionContext`,
+и `Injectable`, для создания функциональных компонентов Guard.
+- **Документация**: [NestJS Guards](https://docs.nestjs.com/guards),
+[Reflector](https://docs.nestjs.com/custom-decorators#reflector).
+
+#### Конструктор и зависимости:
+- **Назначение**: Конструктор инъектирует необходимые зависимости: `Reflector`, `TokenService`, `AuthCacheService`,
+`UserRepository`.
+- **Технический аспект**: Используется механизм Dependency Injection, встроенный в NestJS.
+- **Документация**: [NestJS Dependency Injection](https://docs.nestjs.com/fundamentals/custom-providers#dependency-injection).
+
+#### Метод `canActivate`:
+- **Блок skipAuth**:
+  - **Назначение**: Позволяет пропускать аутентификацию для маршрутов с соответствующим декоратором.
+  - **Технический аспект**: `reflector.getAllAndOverride` извлекает метаданные из класса и метода.
+  - **Связь с NestJS**: Используется Reflector для работы с кастомными декораторами.
+- **Документация**: [Reflector API](https://docs.nestjs.com/custom-decorators#reflection-and-metadata).
+
+#### Проверка наличия токена (`accessToken`):
+- **Назначение**: Извлечение токена из заголовка `Authorization`.
+- **Технический аспект**: Метод `request.get` получает заголовок, `split('Bearer ')[1]` извлекает чистое значение токена.
+- **Проблемы и решения**: Желательно добавлять более подробные ошибки для лучшего понимания причин отказа в доступе.
+- **Связь с NestJS**: Контекст запроса извлекается через метод `context.switchToHttp().getRequest()`.
+- **Документация**: [Request Lifecycle](https://docs.nestjs.com/faq/request-lifecycle).
+
+#### Верификация токена с использованием `tokenService.verifyToken`:
+- **Назначение**: Проверка валидности токена.
+- **Технический аспект**: Асинхронный вызов метода сервиса, возвращающего полезную нагрузку (payload) или `null`,
+если токен недействителен.
+- **Расширение**: Можно добавить логику для обработки разных ошибок токена, таких как истечение срока действия.
+- **Документация**: [Token Verification Concepts](https://docs.nestjs.com/security/authentication).
+
+#### Проверка существования токена в кеше (`authCacheService.isAccessTokenExist`):
+- **Назначение**: Убедиться, что токен существует и активен в системе.
+- **Технический аспект**: Асинхронный вызов к кеш-сервису с параметрами `userId`, `deviceId`, и самим токеном.
+- **Потенциальные проблемы**: Если кеш устарел или недоступен, Guard может ошибочно отклонить запрос.
+- **Документация**: [NestJS and Caching](https://docs.nestjs.com/techniques/caching).
+
+#### Поиск пользователя (`userRepository.findOneBy`):
+- **Назначение**: Проверка существования пользователя в базе данных и его актуальности (не удален).
+- **Технический аспект**: Использование `TypeORM` для асинхронного поиска сущности пользователя по `id`.
+- **Документация**: [TypeORM Query Methods](https://typeorm.io/#/repository-api).
+
+#### Привязка данных пользователя (`UserMapper.toIUserData`):
+- **Назначение**: Преобразование сущности пользователя и данных payload в объект, передаваемый в `locals`.
+- **Технический аспект**: Служит для передачи данных пользователя в последующих обработчиках запросов.
+- **Потенциальные улучшения**: Логика преобразования может быть расширена для поддержки дополнительных данных.
+
+### 3. Возможности расширения
+- **Логирование**: Добавить логику логирования для отладки и мониторинга отказов.
+- **Обработка ошибок**: Создать кастомные сообщения для различных исключений, чтобы предоставить более
+детальную информацию пользователям или администраторам.
+- **Множественная аутентификация**: Включить поддержку нескольких типов токенов для повышения гибкости.
+
+### 4. Рекомендации по улучшению
+- **Производительность**: Интеграция с Redis или другим кешем для быстрого доступа к данным о пользователях.
+- **Безопасность**: Ограничение попыток аутентификации, защита от атак повторного воспроизведения токенов.
+- **Читаемость**: Разделить метод `canActivate` на отдельные частные методы для улучшения понимания и тестируемости.
+- **Масштабируемость**: Поддержка дополнительной верификации, например, двухфакторной аутентификации.
+
+### 5. Примеры использования
+**Базовое использование**:
+- Защита маршрута контроллера:
+```typescript
+@Controller('secure')
+@UseGuards(JwtAccessGuard)
+export class SecureController {
+  @Get('data')
+  getData(@Req() req) {
+    return req.res.locals.user; // Доступ к данным пользователя
+  }
+}
+```
+
+**Расширенные сценарии**:
+- Применение декоратора `@SKIP_AUTH()` для пропуска аутентификации на определенных маршрутах:
+```typescript
+@Controller('public')
+@SKIP_AUTH()
+@Get('info')
+getPublicInfo() {
+  return 'This route does not require authentication';
+}
+```
+
+**Обработка ошибок**:
+- Логирование с использованием `Logger` для записи ошибок в консоль или внешние системы логирования.
+
+**Тестирование**:
+-Для тестирования `JwtAccessGuard` рекомендуется использовать подход с модульным тестированием,
+чтобы проверить логику защиты и взаимодействие с сервисами. Пример теста с использованием
+`@nestjs/testing` и библиотеки `jest`:
+
+#### Настройка тестового модуля:
+```typescript
+import { Test, TestingModule } from '@nestjs/testing';
+import { JwtAccessGuard } from './jwt-access.guard';
+import { Reflector } from '@nestjs/core';
+import { TokenService } from '../services/token.service';
+import { AuthCacheService } from '../services/auth-cache-service';
+import { UserRepository } from '../../repositories/services/user.repository';
+import { ExecutionContext } from '@nestjs/common';
+
+describe('JwtAccessGuard', () => {
+  let guard: JwtAccessGuard;
+  let reflector: Reflector;
+  let tokenService: TokenService;
+  let authCacheService: AuthCacheService;
+  let userRepository: UserRepository;
+
+  beforeEach(async () => {
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        JwtAccessGuard,
+        {
+          provide: Reflector,
+          useValue: {
+            getAllAndOverride: jest.fn(),
+          },
+        },
+        {
+          provide: TokenService,
+          useValue: {
+            verifyToken: jest.fn(),
+          },
+        },
+        {
+          provide: AuthCacheService,
+          useValue: {
+            isAccessTokenExist: jest.fn(),
+          },
+        },
+        {
+          provide: UserRepository,
+          useValue: {
+            findOneBy: jest.fn(),
+          },
+        },
+      ],
+    }).compile();
+
+    guard = module.get<JwtAccessGuard>(JwtAccessGuard);
+    reflector = module.get<Reflector>(Reflector);
+    tokenService = module.get<TokenService>(TokenService);
+    authCacheService = module.get<AuthCacheService>(AuthCacheService);
+    userRepository = module.get<UserRepository>(UserRepository);
+  });
+
+  it('should allow access if SKIP_AUTH is set to true', async () => {
+    jest.spyOn(reflector, 'getAllAndOverride').mockReturnValue(true);
+    const context = createMockContext();
+    const result = await guard.canActivate(context);
+    expect(result).toBe(true);
+  });
+
+  it('should throw UnauthorizedException if access token is missing', async () => {
+    const context = createMockContext({
+      get: () => null, // Мокаем отсутствие токена
+    });
+    await expect(guard.canActivate(context)).rejects.toThrow(UnauthorizedException);
+  });
+
+  // Добавить больше тестов для проверки различных сценариев, таких как:
+  // - Неверный токен
+  // - Пользователь не найден
+  // - Ошибки взаимодействия с кешем
+});
+
+// Функция создания мока для ExecutionContext
+function createMockContext(mockRequestData = {}) {
+  return {
+    switchToHttp: () => ({
+      getRequest: () => ({
+        get: jest.fn(() => mockRequestData.get?.() || 'Bearer test_token'),
+        res: {
+          locals: {},
+        },
+      }),
+    }),
+  } as unknown as ExecutionContext;
+}
+```
+
+#### Объяснение тестов:
+- **`Reflector` мокается** для имитации значений, которые он возвращает при вызове `getAllAndOverride`.
+- **Методы `TokenService` и `AuthCacheService`** заменяются мокаемыми функциями для симуляции реального поведения.
+- **Контекст запроса** создается с помощью функции `createMockContext`, позволяющей задать заголовки или
+параметры запроса.
+
+### Плюсы и минусы тестирования:
+- **Преимущества**:
+  - Обеспечивает стабильность работы Guard'а.
+  - Помогает быстро находить и исправлять ошибки в логике.
+- **Потенциальные проблемы**:
+  - Сложность тестирования интеграции с внешними системами (например, Redis).
+  - Необходимость поддержания тестов при изменении логики.
+
+### Заключение
+`JwtAccessGuard` — это мощный компонент для защиты маршрутов в приложении NestJS, обеспечивающий валидацию
+токенов и проверку аутентификации. Улучшение тестового покрытия и добавление дополнительных проверок помогут
+повысить надежность и безопасность приложения.
+---------------
+
+Теперь перейдем к articles
+Доробатываем наш articles.controller.ts
+## Анализ кода `ArticlesController`
+
+### 1. Исходный код с комментариями
+```typescript
+import { Body, Controller, Get, Param, Patch, Post } from '@nestjs/common';
+// Импорт декораторов из NestJS для работы с HTTP-методами и параметрами.
+
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+// Импорт декораторов для Swagger-документации.
+
+import { ArticleID } from '../../common/types/entity-ids.type';
+// Импорт типа `ArticleID`, представляющего уникальный идентификатор статьи.
+
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
+// Импорт кастомного декоратора для получения текущего пользователя из запроса.
+
+import { IUserData } from '../auth/models/interfaces/user-data.interface';
+// Интерфейс для данных пользователя.
+
+import { CreateArticleDto } from './models/dto/req/create-article.dto';
+// DTO для создания новой статьи.
+
+import { UpdateArticleDto } from './models/dto/req/update-article.dto';
+// DTO для обновления статьи.
+
+import { ArticleResDto } from './models/dto/res/article.res.dto';
+// DTO для ответа, содержащего данные статьи.
+
+import { ArticlesMapper } from './services/articles.mapper';
+// Сервис для преобразования сущностей статей в DTO.
+
+import { ArticlesService } from './services/articles.service';
+// Сервис для работы с бизнес-логикой статей.
+
+@ApiBearerAuth()
+// Декоратор для указания, что методы контроллера требуют аутентификации через Bearer-токен.
+
+@ApiTags('Articles')
+// Декоратор для группировки методов контроллера в Swagger-документации под тегом 'Articles'.
+
+@Controller('articles')
+// Декоратор, указывающий, что этот класс — контроллер с базовым маршрутом '/articles'.
+export class ArticlesController {
+  constructor(private readonly usersService: ArticlesService) {}
+  // Конструктор контроллера, инжектирующий ArticlesService для работы с логикой статей.
+
+  @Post()
+  public async create(
+    @CurrentUser() userData: IUserData,
+    @Body() dto: CreateArticleDto,
+  ): Promise<ArticleResDto> {
+    // Метод для создания новой статьи. Принимает данные текущего пользователя и тело запроса с данными для создания.
+    const result = await this.usersService.create(userData, dto);
+    // Вызов метода `create` у сервиса статей для выполнения логики создания.
+    return ArticlesMapper.toResDto(result);
+    // Преобразование результата в DTO для ответа.
+  }
+
+  @Get(':articleId')
+  public async findOne(
+    @Param('articleId') articleId: ArticleID,
+  ): Promise<ArticleResDto> {
+    // Метод для получения статьи по ее ID. Использует параметр маршрута.
+    const result = await this.usersService.findOne(articleId);
+    // Вызов метода `findOne` у сервиса статей.
+    return ArticlesMapper.toResDto(result);
+    // Преобразование результата в DTO для ответа.
+  }
+
+  @Patch(':articleId')
+  public async update(
+    @CurrentUser() userData: IUserData,
+    @Param('articleId') articleId: ArticleID,
+    @Body() dto: UpdateArticleDto,
+  ): Promise<ArticleResDto> {
+    // Метод для обновления статьи. Принимает данные текущего пользователя, ID статьи и данные для обновления.
+    const result = await this.usersService.update(userData, articleId, dto);
+    // Вызов метода `update` у сервиса статей.
+    return ArticlesMapper.toResDto(result);
+    // Преобразование результата в DTO для ответа.
+  }
+}
+```
+
+### 2. Детальный разбор
+**Импорты и зависимости**:
+- `@nestjs/common`: стандартный пакет NestJS с базовыми декораторами для создания контроллеров и методов.
+- `@nestjs/swagger`: используется для автоматической генерации Swagger-документации.
+- `../../common/types/entity-ids.type`: общий тип для идентификаторов сущностей.
+- `ArticlesService`: сервис, содержащий бизнес-логику для работы со статьями.
+- `ArticlesMapper`: утилита для преобразования сущностей в DTO для ответа.
+
+**Декораторы контроллера**:
+- `@ApiBearerAuth()`: добавляет информацию о необходимости авторизации с использованием Bearer-токена.
+- `@ApiTags('Articles')`: группирует методы контроллера под одним тегом в Swagger UI.
+
+**Методы контроллера**:
+- **`@Post()`**:
+  - Обрабатывает POST-запросы на создание новой статьи.
+  - Использует декораторы `@CurrentUser()` и `@Body()` для получения данных пользователя и тела запроса.
+- **`@Get(':articleId')`**:
+  - Обрабатывает GET-запросы для получения статьи по ID.
+  - Декоратор `@Param()` используется для извлечения параметра маршрута.
+- **`@Patch(':articleId')`**:
+  - Обрабатывает PATCH-запросы для обновления статьи.
+  - Использует декораторы `@CurrentUser()`, `@Param()`, `@Body()` для извлечения данных запроса.
+
+### 3. Возможности расширения кода
+- **Добавление обработки ошибок**:
+  - Можно добавить глобальные фильтры исключений для обработки ошибок.
+- **Валидация данных**:
+  - Использование валидационных пайпов для проверки входных данных DTO.
+- **Логирование**:
+  - Добавить middleware или интерсепторы для логирования запросов и ответов.
+- **Аутентификация и авторизация**:
+  - Расширить декоратор `@ApiBearerAuth()` для работы с другими типами токенов.
+
+### 4. Рекомендации по улучшению
+- **Читаемость**: добавить комментарии к методам для большей ясности.
+- **Безопасность**: убедиться, что пользователь имеет права на выполнение операций.
+- **Тестируемость**: написать тесты для методов контроллера с использованием `@nestjs/testing`.
+- **Производительность**: добавить кеширование для методов `GET`, чтобы уменьшить нагрузку на базу данных.
+
+### 5. Примеры использования
+#### Базовое использование:
+- **Создание статьи**:
+  ```bash
+  POST /articles
+  Authorization: Bearer <token>
+  {
+    "title": "New Article",
+    "content": "This is the content of the new article."
+  }
+  ```
+
+#### Обработка ошибок:
+- Добавить глобальный фильтр для возвращения стандартизированных ошибок.
+
+#### Тестирование:
+- Использовать `jest` для написания модульных тестов:
+  ```typescript
+  describe('ArticlesController', () => {
+    it('should create an article', async () => {
+      // Тест создания статьи.
+    });
+  });
+  ```
+
+Таким образом, `ArticlesController` предоставляет методы для управления статьями, включая создание,
+получение и обновление.
+
+## Анализ контроллера ArticlesController
+
+### 1. Общий обзор
+
+#### Назначение модуля
+ArticlesController представляет собой REST контроллер в NestJS приложении, который обрабатывает операции CRUD для
+сущности Article (статьи). Контроллер реализует три основных эндпоинта:
+- Создание новой статьи (POST /articles)
+- Получение статьи по ID (GET /articles/:articleId)
+- Обновление существующей статьи (PATCH /articles/:articleId)
+
+#### Место в архитектуре
+- Является частью слоя контроллеров в многослойной архитектуре NestJS
+- Взаимодействует с ArticlesService для выполнения бизнес-логики
+- Использует ArticlesMapper для преобразования данных
+- Интегрируется с системой аутентификации через декоратор @CurrentUser
+
+#### Взаимодействие с другими компонентами
+```mermaid
+graph TB
+    Client[HTTP Client]
+    Controller[ArticlesController]
+    Service[ArticlesService]
+    Mapper[ArticlesMapper]
+    DB[(Database)]
+
+    Client --> Controller
+    Controller --> Service
+    Controller --> Mapper
+    Service --> DB
+```
+
+### 2. Построчный анализ
+
+#### Импорты и декораторы
+```typescript
+import { Body, Controller, Get, Param, Patch, Post } from '@nestjs/common';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+```
+- `@nestjs/common` - базовые декораторы для построения REST API
+- `@nestjs/swagger` - интеграция с OpenAPI/Swagger для документирования API
+
+```typescript
+@ApiBearerAuth() // Указывает на необходимость JWT токена
+@ApiTags('Articles') // Группирует endpoints в Swagger UI
+@Controller('articles') // Определяет базовый путь '/articles'
+```
+
+#### Конструктор
+```typescript
+constructor(private readonly usersService: ArticlesService) {}
+```
+- Использует Dependency Injection для внедрения ArticlesService
+- `readonly` предотвращает случайную модификацию сервиса
+- Название переменной `usersService` должно быть исправлено на `articlesService`
+
+#### Методы контроллера
+
+##### Create
+```typescript
+@Post()
+public async create(
+    @CurrentUser() userData: IUserData,
+    @Body() dto: CreateArticleDto,
+): Promise<ArticleResDto>
+```
+- Обрабатывает POST запросы
+- Использует пользовательские данные из токена
+- Валидирует входные данные через DTO
+- Возвращает DTO ответа
+
+##### FindOne
+```typescript
+@Get(':articleId')
+public async findOne(
+    @Param('articleId') articleId: ArticleID,
+): Promise<ArticleResDto>
+```
+- Обрабатывает GET запросы с параметром
+- Использует типизированный ArticleID
+- Возвращает найденную статью или выбрасывает исключение
+
+##### Update
+```typescript
+@Patch(':articleId')
+public async update(
+    @CurrentUser() userData: IUserData,
+    @Param('articleId') articleId: ArticleID,
+    @Body() dto: UpdateArticleDto,
+): Promise<ArticleResDto>
+```
+- Обрабатывает PATCH запросы
+- Комбинирует параметры пути и тела запроса
+- Проверяет права пользователя через userData
+
+### 3. Возможности расширения
+
+#### Дополнительные эндпоинты
+1. Удаление статей
+```typescript
+@Delete(':articleId')
+public async remove(
+    @CurrentUser() userData: IUserData,
+    @Param('articleId') articleId: ArticleID,
+): Promise<void>
+```
+
+2. Получение списка статей
+```typescript
+@Get()
+public async findAll(
+    @Query() query: FindArticlesQueryDto
+): Promise<ArticleListResDto>
+```
+
+#### Расширение функциональности
+1. Добавление пагинации
+```typescript
+export class FindArticlesQueryDto {
+    @IsOptional()
+    @IsInt()
+    @Min(1)
+    page?: number;
+
+    @IsOptional()
+    @IsInt()
+    @Min(1)
+    @Max(100)
+    limit?: number;
+}
+```
+
+2. Фильтрация и сортировка
+```typescript
+export class FindArticlesQueryDto {
+    @IsOptional()
+    @IsString()
+    search?: string;
+
+    @IsOptional()
+    @IsEnum(['date', 'title', 'author'])
+    sortBy?: string;
+}
+```
+
+### 4. Оптимизация и улучшения
+
+#### Безопасность
+1. Добавление rate limiting
+```typescript
+@UseGuards(ThrottlerGuard)
+@Throttle(10, 60) // 10 requests per minute
+```
+
+2. Валидация входных данных
+```typescript
+export class CreateArticleDto {
+    @IsString()
+    @MinLength(5)
+    @MaxLength(100)
+    @Escape()
+    title: string;
+
+    @IsString()
+    @MinLength(10)
+    @MaxLength(10000)
+    @SanitizeHtml()
+    content: string;
+}
+```
+
+#### Производительность
+1. Кэширование
+```typescript
+@UseInterceptors(CacheInterceptor)
+@CacheKey('article')
+@CacheTTL(30)
+@Get(':articleId')
+```
+
+2. Оптимизация запросов
+```typescript
+@Get()
+public async findAll(@Query() query: FindArticlesQueryDto) {
+    return this.articlesService.findAll({
+        select: ['id', 'title', 'preview'],
+        relations: ['author'],
+        ...query
+    });
+}
+```
+
+### 5. Практические примеры
+
+#### Базовое использование
+```typescript
+// Создание статьи
+const response = await axios.post('/articles', {
+    title: 'New Article',
+    content: 'Article content'
+}, {
+    headers: { Authorization: `Bearer ${token}` }
+});
+
+// Получение статьи
+const article = await axios.get(`/articles/${articleId}`);
+
+// Обновление статьи
+const updated = await axios.patch(`/articles/${articleId}`, {
+    title: 'Updated Title'
+}, {
+    headers: { Authorization: `Bearer ${token}` }
+});
+```
+
+#### Обработка ошибок
+```typescript
+@Post()
+public async create(
+    @CurrentUser() userData: IUserData,
+    @Body() dto: CreateArticleDto,
+): Promise<ArticleResDto> {
+    try {
+        const result = await this.articlesService.create(userData, dto);
+        return ArticlesMapper.toResDto(result);
+    } catch (error) {
+        if (error instanceof ValidationError) {
+            throw new BadRequestException(error.message);
+        }
+        throw new InternalServerErrorException(
+            'Unable to create article'
+        );
+    }
+}
+```
+
+#### Тестирование
+```typescript
+describe('ArticlesController', () => {
+    let controller: ArticlesController;
+    let service: ArticlesService;
+
+    beforeEach(async () => {
+        const module = await Test.createTestingModule({
+            controllers: [ArticlesController],
+            providers: [{
+                provide: ArticlesService,
+                useValue: {
+                    create: jest.fn(),
+                    findOne: jest.fn(),
+                    update: jest.fn(),
+                }
+            }],
+        }).compile();
+
+        controller = module.get(ArticlesController);
+        service = module.get(ArticlesService);
+    });
+
+    describe('create', () => {
+        it('should create article', async () => {
+            const dto = { title: 'Test', content: 'Content' };
+            const userData = { id: 1, email: 'test@test.com' };
+
+            jest.spyOn(service, 'create')
+                .mockResolvedValue({ id: 1, ...dto });
+
+            const result = await controller.create(userData, dto);
+
+            expect(result).toBeDefined();
+            expect(service.create).toBeCalledWith(userData, dto);
+        });
+    });
+});
+
+На основе проведенного анализа, могу предложить следующие основные рекомендации по улучшению кода:
+
+Исправить название переменной usersService на articlesService
+Добавить обработку ошибок в контроллере
+Реализовать недостающие CRUD операции (delete, findAll)
+Добавить валидацию входных данных
+Внедрить кэширование для часто запрашиваемых данных
+Добавить документацию с помощью Swagger декораторов
+Реализовать тесты
+--------
+
+Теперь обновляем update-article.dto.ts
+import { PickType } from '@nestjs/swagger';
+
+import { BaseArticleReqDto } from './base-article.req.dto';
+
+export class UpdateArticleDto extends PickType(BaseArticleReqDto, [
+  'title',
+  'description',
+  'body',
+]) {}
+
+## Анализ кода UpdateArticleDto
+
+
+
+
+
+## Анализ UpdateArticleDto
+
+### 1. Общий обзор
+
+#### Назначение компонента
+`UpdateArticleDto` - это Data Transfer Object (DTO), используемый для валидации и типизации данных при обновлении статьи.
+Он наследует выборочные поля из базового DTO с помощью утилиты `PickType`.
+
+#### Место в архитектуре
+- Является частью слоя DTO в модуле Articles
+- Используется в контроллере для валидации входящих данных
+- Наследует структуру от базового DTO `BaseArticleReqDto`
+
+#### Взаимодействие
+```mermaid
+graph LR
+    Client[HTTP Client] --> Controller[ArticlesController]
+    Controller --> DTO[UpdateArticleDto]
+    DTO --> BaseDTO[BaseArticleReqDto]
+    Controller --> Service[ArticlesService]
+```
+
+### 2. Построчный анализ
+
+```typescript
+// Импорт утилиты PickType из пакета @nestjs/swagger
+import { PickType } from '@nestjs/swagger';
+```
+- `PickType` - утилита для создания производного типа с выбранными полями
+- Часть экосистемы OpenAPI/Swagger в NestJS
+- [Документация по PickType](https://docs.nestjs.com/openapi/types-and-parameters#utility-types)
+
+```typescript
+import { BaseArticleReqDto } from './base-article.req.dto';
+```
+- Импорт базового DTO, содержащего все возможные поля статьи
+- Предполагается наличие валидации в базовом классе
+
+```typescript
+export class UpdateArticleDto extends PickType(BaseArticleReqDto, [
+  'title',
+  'description',
+  'body',
+]) {}
+```
+- Создание нового класса DTO для операции обновления
+- Выборка только необходимых полей из базового DTO
+- Наследование всех декораторов валидации для выбранных полей
+
+### 3. Возможности расширения
+
+#### Добавление частичного обновления
+```typescript
+import { PartialType, PickType } from '@nestjs/swagger';
+
+export class UpdateArticleDto extends PartialType(
+  PickType(BaseArticleReqDto, ['title', 'description', 'body'])
+) {}
+```
+
+#### Добавление дополнительной валидации
+```typescript
+import { PickType } from '@nestjs/swagger';
+import { IsOptional, MinLength } from 'class-validator';
+
+export class UpdateArticleDto extends PickType(BaseArticleReqDto, [
+  'title',
+  'description',
+  'body',
+]) {
+  @IsOptional()
+  @MinLength(10)
+  description?: string;
+}
+```
+
+#### Версионирование DTO
+```typescript
+import { PickType } from '@nestjs/swagger';
+import { ApiProperty } from '@nestjs/swagger';
+
+export class UpdateArticleV2Dto extends PickType(BaseArticleReqDto, [
+  'title',
+  'description',
+  'body',
+]) {
+  @ApiProperty({ type: [String] })
+  tags: string[];
+}
+```
+
+### 4. Оптимизация и улучшения
+
+#### Безопасность
+1. Добавление санитизации данных
+```typescript
+import { Transform } from 'class-transformer';
+import { PickType } from '@nestjs/swagger';
+
+export class UpdateArticleDto extends PickType(BaseArticleReqDto, [
+  'title',
+  'description',
+  'body',
+]) {
+  @Transform(({ value }) => value.trim())
+  title: string;
+
+  @Transform(({ value }) => sanitizeHtml(value))
+  body: string;
+}
+```
+
+2. Валидация вложенных объектов
+```typescript
+import { Type } from 'class-transformer';
+import { ValidateNested } from 'class-validator';
+
+class MetadataDto {
+  @IsString()
+  author: string;
+}
+
+export class UpdateArticleDto extends PickType(BaseArticleReqDto, [
+  'title',
+  'description',
+  'body',
+]) {
+  @ValidateNested()
+  @Type(() => MetadataDto)
+  metadata: MetadataDto;
+}
+```
+
+#### Читаемость
+1. Добавление документации
+```typescript
+import { ApiProperty } from '@nestjs/swagger';
+
+export class UpdateArticleDto extends PickType(BaseArticleReqDto, [
+  'title',
+  'description',
+  'body',
+]) {
+  @ApiProperty({
+    description: 'Article title',
+    minLength: 5,
+    maxLength: 100,
+  })
+  title: string;
+}
+```
+
+### 5. Практические примеры
+
+#### Базовое использование
+```typescript
+// В контроллере
+@Patch(':id')
+async update(
+  @Param('id') id: string,
+  @Body() updateArticleDto: UpdateArticleDto
+) {
+  return this.articlesService.update(id, updateArticleDto);
+}
+
+// Пример запроса
+const data = {
+  title: 'Updated Title',
+  description: 'New description',
+  body: 'Article content'
+};
+await axios.patch(`/articles/${id}`, data);
+```
+
+#### Обработка ошибок
+```typescript
+import { ValidationPipe } from '@nestjs/common';
+
+// В main.ts
+app.useGlobalPipes(
+  new ValidationPipe({
+    whitelist: true,
+    transform: true,
+    forbidNonWhitelisted: true,
+    exceptionFactory: (errors) => {
+      const messages = errors.map(error => ({
+        field: error.property,
+        message: Object.values(error.constraints).join(', '),
+      }));
+      return new BadRequestException(messages);
+    },
+  }),
+);
+```
+
+#### Тестирование
+```typescript
+describe('UpdateArticleDto', () => {
+  it('should be valid', async () => {
+    const dto = new UpdateArticleDto();
+    dto.title = 'Valid Title';
+    dto.description = 'Valid description';
+    dto.body = 'Valid content';
+
+    const errors = await validate(dto);
+    expect(errors.length).toBe(0);
+  });
+
+  it('should fail on invalid title', async () => {
+    const dto = new UpdateArticleDto();
+    dto.title = ''; // Invalid empty title
+
+    const errors = await validate(dto);
+    expect(errors.length).toBeGreaterThan(0);
+    expect(errors[0].property).toBe('title');
+  });
+});
+```
+
+На основе проведенного анализа, основные рекомендации по улучшению:
+
+1. Добавить явную валидацию полей с помощью декораторов class-validator
+2. Внедрить санитизацию входных данных
+3. Добавить документацию Swagger для улучшения API-документации
+4. Реализовать версионирование DTO при необходимости изменения структуры
+5. Добавить модульные тесты для проверки валидации
+------------
+
+Далее обновим create-article.dto.ts
+import { PickType } from '@nestjs/swagger';
+
+import { BaseArticleReqDto } from './base-article.req.dto';
+
+export class CreateArticleDto extends PickType(BaseArticleReqDto, [
+  'title',
+  'description',
+  'body',
+  'tags',
+]) {}
+
+## Анализ кода CreateArticleDto
+
+
+
+## Анализ CreateArticleDto
+
+### 1. Общий обзор
+
+#### Назначение компонента
+`CreateArticleDto` - это Data Transfer Object (DTO), используемый для валидации и типизации данных при создании
+новой статьи. Он использует утилиту `PickType` для выборочного наследования полей из базового DTO.
+
+#### Место в архитектуре
+- Компонент слоя DTO в модуле Articles
+- Используется в контроллере для валидации входящих POST запросов
+- Наследует и переиспользует структуру из BaseArticleReqDto
+
+#### Взаимодействие с системой
+```mermaid
+graph TD
+    Client[HTTP Client] --> |POST /articles| Controller[ArticlesController]
+    Controller --> |Validates| CreateArticleDto
+    CreateArticleDto --> |Inherits| BaseArticleReqDto
+    Controller --> |Creates| Service[ArticlesService]
+    Service --> |Saves| Database[(Database)]
+```
+
+### 2. Построчный анализ
+
+```typescript
+// Импорт утилиты PickType из пакета @nestjs/swagger
+import { PickType } from '@nestjs/swagger';
+```
+- `PickType` - утилита из @nestjs/swagger для создания нового типа на основе существующего
+- Позволяет выбрать подмножество свойств из базового класса
+- Сохраняет все декораторы валидации и документации
+- [Документация по PickType](https://docs.nestjs.com/openapi/mapped-types#pick)
+
+```typescript
+import { BaseArticleReqDto } from './base-article.req.dto';
+```
+- Импорт базового DTO, содержащего полную модель статьи
+- Предполагается, что BaseArticleReqDto содержит все возможные поля и их валидацию
+
+```typescript
+export class CreateArticleDto extends PickType(BaseArticleReqDto, [
+  'title',
+  'description',
+  'body',
+  'tags',
+]) {}
+```
+- Создание нового класса DTO для операции создания статьи
+- Выбор только необходимых полей: title, description, body, tags
+- Наследование всех декораторов валидации и метаданных Swagger
+
+### 3. Возможности расширения
+
+#### Добавление дополнительных полей
+```typescript
+export class CreateArticleDto extends PickType(BaseArticleReqDto, [
+  'title',
+  'description',
+  'body',
+  'tags',
+]) {
+  @ApiProperty()
+  @IsOptional()
+  @IsString()
+  category?: string;
+
+  @ApiProperty({ type: [String] })
+  @IsArray()
+  @IsString({ each: true })
+  coAuthors: string[];
+}
+```
+
+#### Добавление кастомной валидации
+```typescript
+import { ValidateIf } from 'class-validator';
+
+export class CreateArticleDto extends PickType(BaseArticleReqDto, [
+  'title',
+  'description',
+  'body',
+  'tags',
+]) {
+  @ValidateIf(o => o.type === 'technical')
+  @IsArray()
+  @ArrayMinSize(3)
+  tags: string[];
+
+  @IsEnum(['technical', 'news', 'opinion'])
+  type: string;
+}
+```
+
+#### Версионирование
+```typescript
+@ApiVersion('2')
+export class CreateArticleV2Dto extends CreateArticleDto {
+  @ApiProperty()
+  @IsUrl()
+  coverImage: string;
+
+  @ApiProperty()
+  @IsObject()
+  metadata: Record<string, any>;
+}
+```
+
+### 4. Оптимизация и улучшения
+
+#### Безопасность
+1. Добавление санитизации данных
+```typescript
+import { Transform } from 'class-transformer';
+
+export class CreateArticleDto extends PickType(BaseArticleReqDto, [
+  'title',
+  'description',
+  'body',
+  'tags',
+]) {
+  @Transform(({ value }) => sanitizeHtml(value))
+  body: string;
+
+  @Transform(({ value }) => value.map(tag => tag.toLowerCase()))
+  tags: string[];
+}
+```
+
+2. Валидация сложных данных
+```typescript
+export class CreateArticleDto extends PickType(BaseArticleReqDto, [
+  'title',
+  'description',
+  'body',
+  'tags',
+]) {
+  @IsString()
+  @MinLength(5)
+  @MaxLength(100)
+  @Matches(/^[a-zA-Z0-9\s-]+$/)
+  title: string;
+
+  @IsArray()
+  @ArrayMaxSize(10)
+  @ArrayUnique()
+  @IsString({ each: true })
+  @MaxLength(20, { each: true })
+  tags: string[];
+}
+```
+
+#### Производительность
+```typescript
+import { ValidateIf } from 'class-validator';
+
+export class CreateArticleDto extends PickType(BaseArticleReqDto, [
+  'title',
+  'description',
+  'body',
+  'tags',
+]) {
+  @ValidateIf(o => o.type === 'long')
+  @IsString()
+  @MaxLength(10000)
+  body: string;
+
+  @ValidateIf(o => o.type === 'short')
+  @IsString()
+  @MaxLength(1000)
+  body: string;
+}
+```
+
+### 5. Практические примеры
+
+#### Базовое использование
+```typescript
+// В контроллере
+@Post()
+async create(@Body() createArticleDto: CreateArticleDto) {
+  return this.articlesService.create(createArticleDto);
+}
+
+// Пример запроса
+const article = {
+  title: 'Understanding NestJS DTOs',
+  description: 'A guide to Data Transfer Objects',
+  body: 'Content goes here...',
+  tags: ['nestjs', 'typescript', 'web-development']
+};
+const response = await axios.post('/articles', article);
+```
+
+#### Обработка ошибок
+```typescript
+// Глобальная настройка валидации
+app.useGlobalPipes(
+  new ValidationPipe({
+    transform: true,
+    whitelist: true,
+    forbidNonWhitelisted: true,
+    exceptionFactory: (errors) => {
+      const formattedErrors = errors.reduce((acc, err) => {
+        acc[err.property] = Object.values(err.constraints);
+        return acc;
+      }, {});
+      throw new BadRequestException({
+        message: 'Validation failed',
+        errors: formattedErrors
+      });
+    }
+  })
+);
+```
+
+#### Тестирование
+```typescript
+describe('CreateArticleDto', () => {
+  let dto: CreateArticleDto;
+
+  beforeEach(() => {
+    dto = new CreateArticleDto();
+  });
+
+  it('should be valid with correct data', async () => {
+    dto.title = 'Valid Title';
+    dto.description = 'Valid description';
+    dto.body = 'Valid content';
+    dto.tags = ['tag1', 'tag2'];
+
+    const errors = await validate(dto);
+    expect(errors.length).toBe(0);
+  });
+
+  it('should fail with invalid tags', async () => {
+    dto.title = 'Valid Title';
+    dto.tags = [''];  // Empty tag
+
+    const errors = await validate(dto);
+    expect(errors.length).toBeGreaterThan(0);
+    expect(errors[0].property).toBe('tags');
+  });
+
+  it('should sanitize HTML in body', async () => {
+    dto.body = '<script>alert("xss")</script>Content';
+    const transformed = plainToClass(CreateArticleDto, dto);
+
+    expect(transformed.body).not.toContain('<script>');
+  });
+});
+```
+Основные рекомендации по улучшению:
+
+1. Добавить подробную валидацию для каждого поля
+2. Внедрить санитизацию данных для предотвращения XSS атак
+3. Добавить Swagger документацию для улучшения API документации
+4. Реализовать тесты для проверки валидации
+5. Рассмотреть версионирование DTO при необходимости изменений
+------------------------
+
+Теперь в папке src/common/helpers обновим файл transform.helper.ts
+export class TransformHelper {
+  public static toLowerCase({ value }: { value: string }): string {
+    return value ? value.toString().toLowerCase() : value;
+  }
+
+  public static trim({ value }: { value: string }): string {
+    return value ? value.toString().trim() : value;
+  }
+
+  public static trimArray({ value }) {
+    return Array.isArray(value) ? value.map((item) => item.trim()) : value;
+  }
+
+  public static uniqueItems({ value }) {
+    return value ? Array.from(new Set(value)) : value;
+  }
+
+  public static toLowerCaseArray({ value }) {
+    return Array.isArray(value)
+      ? value.map((item) => item.toLowerCase())
+      : value;
+  }
+}
+
+## Анализ кода TransformHelper
+
+
+
+## Анализ TransformHelper
+
+### 1. Общий обзор
+
+#### Назначение компонента
+`TransformHelper` - это утилитарный класс, предоставляющий набор статических методов для трансформации данных.
+Основное назначение - предобработка и нормализация входных данных в NestJS приложении.
+
+#### Место в архитектуре
+- Является частью слоя утилит/хелперов
+- Используется совместно с декораторами `@Transform` из class-transformer
+- Применяется в DTO для предварительной обработки данных
+
+#### Взаимодействие
+```mermaid
+graph TD
+    Request[HTTP Request] --> |Raw Data| DTO[DTO]
+    DTO --> |@Transform| TransformHelper
+    TransformHelper --> |Processed Data| Controller[Controller]
+```
+
+### 2. Построчный анализ
+
+```typescript
+export class TransformHelper {
+```
+- Объявление класса с публичными статическими методами
+- Статические методы позволяют использовать функции без создания экземпляра класса
+
+```typescript
+public static toLowerCase({ value }: { value: string }): string {
+  return value ? value.toString().toLowerCase() : value;
+}
+```
+- Преобразует строку в нижний регистр
+- Использует деструктуризацию параметров
+- Безопасно обрабатывает null/undefined значения
+- Приводит значение к строке перед преобразованием
+
+```typescript
+public static trim({ value }: { value: string }): string {
+  return value ? value.toString().trim() : value;
+}
+```
+- Удаляет пробельные символы в начале и конце строки
+- Безопасно обрабатывает null/undefined значения
+- Приводит значение к строке перед обработкой
+
+```typescript
+public static trimArray({ value }) {
+  return Array.isArray(value) ? value.map((item) => item.trim()) : value;
+}
+```
+- Применяет trim к каждому элементу массива
+- Проверяет является ли value массивом
+- Возвращает исходное значение для не-массивов
+
+```typescript
+public static uniqueItems({ value }) {
+  return value ? Array.from(new Set(value)) : value;
+}
+```
+- Удаляет дублирующиеся элементы из массива
+- Использует Set для обеспечения уникальности
+- Безопасно обрабатывает null/undefined
+
+```typescript
+public static toLowerCaseArray({ value }) {
+  return Array.isArray(value)
+    ? value.map((item) => item.toLowerCase())
+    : value;
+}
+```
+- Преобразует все элементы массива в нижний регистр
+- Проверяет является ли value массивом
+- Возвращает исходное значение для не-массивов
+
+### 3. Возможности расширения
+
+#### Добавление новых трансформаций
+```typescript
+export class TransformHelper {
+  // Существующие методы...
+
+  public static toUpperCase({ value }: { value: string }): string {
+    return value ? value.toString().toUpperCase() : value;
+  }
+
+  public static capitalize({ value }: { value: string }): string {
+    return value
+      ? value.toString().charAt(0).toUpperCase() + value.slice(1).toLowerCase()
+      : value;
+  }
+
+  public static normalizeEmail({ value }: { value: string }): string {
+    return value ? value.toString().toLowerCase().trim() : value;
+  }
+
+  public static toNumber({ value }): number {
+    return value ? Number(value) : value;
+  }
+}
+```
+
+#### Добавление параметров конфигурации
+```typescript
+export class TransformHelper {
+  public static trim({ value, chars }: { value: string; chars?: string }): string {
+    if (!value) return value;
+    if (chars) {
+      return value.toString().replace(new RegExp(`^[${chars}]+|[${chars}]+$`, 'g'), '');
+    }
+    return value.toString().trim();
+  }
+}
+```
+
+### 4. Оптимизация и улучшения
+
+#### Типизация
+```typescript
+export class TransformHelper {
+  public static trimArray({ value }: { value: string[] | any }): string[] | any {
+    return Array.isArray(value)
+      ? value.map((item: string) => item?.toString().trim())
+      : value;
+  }
+
+  public static uniqueItems<T>({ value }: { value: T[] | any }): T[] | any {
+    return value ? Array.from(new Set(value)) : value;
+  }
+}
+```
+
+#### Обработка ошибок
+```typescript
+export class TransformHelper {
+  public static toLowerCase({ value }: { value: string }): string {
+    try {
+      return value ? value.toString().toLowerCase() : value;
+    } catch (error) {
+      console.error('Transform error:', error);
+      return value;
+    }
+  }
+}
+```
+
+#### Производительность
+```typescript
+export class TransformHelper {
+  private static readonly cache = new Map<string, string>();
+
+  public static toLowerCase({ value }: { value: string }): string {
+    if (!value) return value;
+    const cacheKey = `lower:${value}`;
+    if (this.cache.has(cacheKey)) {
+      return this.cache.get(cacheKey);
+    }
+    const result = value.toString().toLowerCase();
+    this.cache.set(cacheKey, result);
+    return result;
+  }
+}
+```
+
+### 5. Практические примеры
+
+#### Базовое использование
+```typescript
+// В DTO
+import { Transform } from 'class-transformer';
+
+export class CreateUserDto {
+  @Transform(TransformHelper.trim)
+  @IsString()
+  name: string;
+
+  @Transform(TransformHelper.toLowerCase)
+  @IsEmail()
+  email: string;
+
+  @Transform(TransformHelper.trimArray)
+  @Transform(TransformHelper.uniqueItems)
+  @IsArray()
+  @IsString({ each: true })
+  tags: string[];
+}
+```
+
+#### Расширенные сценарии
+```typescript
+// Композиция трансформаций
+export class AdvancedDto {
+  @Transform(({ value }) => {
+    value = TransformHelper.trim({ value });
+    value = TransformHelper.toLowerCase({ value });
+    return value;
+  })
+  email: string;
+
+  @Transform(({ value }) => {
+    value = TransformHelper.trimArray({ value });
+    value = TransformHelper.uniqueItems({ value });
+    value = TransformHelper.toLowerCaseArray({ value });
+    return value;
+  })
+  tags: string[];
+}
+```
+
+#### Тестирование
+```typescript
+describe('TransformHelper', () => {
+  describe('toLowerCase', () => {
+    it('should transform string to lower case', () => {
+      expect(TransformHelper.toLowerCase({ value: 'TEST' })).toBe('test');
+    });
+
+    it('should handle null values', () => {
+      expect(TransformHelper.toLowerCase({ value: null })).toBeNull();
+    });
+  });
+
+  describe('trimArray', () => {
+    it('should trim all array items', () => {
+      const input = [' test ', 'hello ', ' world'];
+      const expected = ['test', 'hello', 'world'];
+      expect(TransformHelper.trimArray({ value: input })).toEqual(expected);
+    });
+
+    it('should handle non-array values', () => {
+      expect(TransformHelper.trimArray({ value: 'test' })).toBe('test');
+    });
+  });
+
+  describe('uniqueItems', () => {
+    it('should remove duplicates', () => {
+      const input = ['a', 'b', 'a', 'c', 'b'];
+      const expected = ['a', 'b', 'c'];
+      expect(TransformHelper.uniqueItems({ value: input })).toEqual(expected);
+    });
+  });
+});
+```
+
+Основные рекомендации по улучшению:
+
+1. Добавить строгую типизацию для всех методов
+2. Внедрить обработку ошибок
+3. Добавить кэширование для часто используемых операций
+4. Расширить набор трансформаций
+5. Улучшить документацию и примеры использования
+--------------
+
+Обновляем article.service.ts
+import { Injectable } from '@nestjs/common';
+import { In } from 'typeorm';
+
+import { ArticleID } from '../../../common/types/entity-ids.type';
+import { ArticleEntity } from '../../../database/entities/article.entity';
+import { TagEntity } from '../../../database/entities/tag.entity';
+import { IUserData } from '../../auth/models/interfaces/user-data.interface';
+import { ArticleRepository } from '../../repositories/services/article.repository';
+import { TagRepository } from '../../repositories/services/tag.repository';
+import { CreateArticleDto } from '../models/dto/req/create-article.dto';
+import { UpdateArticleDto } from '../models/dto/req/update-article.dto';
+
+@Injectable()
+export class ArticlesService {
+  constructor(
+    private readonly articleRepository: ArticleRepository,
+    private readonly tagRepository: TagRepository,
+  ) {}
+
+  public async create(
+    userData: IUserData,
+    dto: CreateArticleDto,
+  ): Promise<ArticleEntity> {
+    const tags = await this.createTags(dto.tags);
+
+    return await this.articleRepository.save(
+      this.articleRepository.create({ ...dto, tags, user_id: userData.userId }),
+    );
+  }
+
+  public async findOne(articleId: ArticleID): Promise<ArticleEntity> {
+    return {} as any;
+  }
+
+  public async update(
+    userData: IUserData,
+    articleId: ArticleID,
+    updateUserDto: UpdateArticleDto,
+  ): Promise<ArticleEntity> {
+    return {} as any;
+  }
+
+  private async createTags(tags: string[]): Promise<TagEntity[]> {
+    if (!tags || !tags.length) return [];
+
+    const entities = await this.tagRepository.findBy({ name: In(tags) });
+    const existingTags = entities.map((tag) => tag.name);
+    const newTags = tags.filter((tag) => !existingTags.includes(tag));
+    const newEntities = await this.tagRepository.save(
+      newTags.map((tag) => this.tagRepository.create({ name: tag })),
+    );
+    return [...entities, ...newEntities];
+  }
+}
+
+Выполню подробный анализ предоставленного кода согласно указанной структуре.
+
+## Анализ кода ArticlesService
+
+### 1. Общий обзор
+
+ArticlesService - это сервисный класс NestJS, отвечающий за управление статьями и их тегами в приложении.
+
+Место в архитектуре:
+- Является частью сервисного слоя приложения
+- Работает с репозиториями для доступа к данным
+- Реализует бизнес-логику для работы со статьями и тегами
+
+Взаимодействие:
+- Использует ArticleRepository и TagRepository для работы с БД
+- Принимает DTO для создания/обновления статей
+- Интегрируется с системой аутентификации через IUserData
+
+### 2. Детальный разбор
+
+```typescript
+@Injectable()
+export class ArticlesService {
+```
+- Декоратор `@Injectable()` регистрирует класс как провайдер в DI-контейнере NestJS
+- Позволяет внедрять сервис в другие компоненты
+- [Документация по провайдерам](https://docs.nestjs.com/providers)
+
+```typescript
+constructor(
+  private readonly articleRepository: ArticleRepository,
+  private readonly tagRepository: TagRepository,
+) {}
+```
+- Конструктор с внедрением зависимостей
+- Репозитории помечены как readonly для предотвращения случайной перезаписи
+- Использует private для инкапсуляции
+
+```typescript
+public async create(
+  userData: IUserData,
+  dto: CreateArticleDto,
+): Promise<ArticleEntity>
+```
+- Публичный метод создания статьи
+- Принимает данные пользователя и DTO
+- Возвращает Promise с созданной сущностью
+- Асинхронный для работы с БД
+
+```typescript
+private async createTags(tags: string[]): Promise<TagEntity[]>
+```
+Метод создания тегов:
+1. Проверяет существующие теги
+2. Фильтрует новые теги
+3. Создает отсутствующие теги
+4. Возвращает все теги статьи
+
+### 3. Возможности расширения
+
+1. Добавление пагинации:
+```typescript
+public async findAll(page: number, limit: number): Promise<ArticleEntity[]> {
+  return this.articleRepository.findAndCount({
+    skip: (page - 1) * limit,
+    take: limit,
+    relations: ['tags']
+  });
+}
+```
+
+2. Поддержка поиска:
+```typescript
+public async search(query: string): Promise<ArticleEntity[]> {
+  return this.articleRepository
+    .createQueryBuilder('article')
+    .where('article.title ILIKE :query', { query: `%${query}%` })
+    .getMany();
+}
+```
+
+3. Кэширование тегов:
+```typescript
+@Inject(CACHE_MANAGER)
+private cacheManager: Cache;
+
+private async getCachedTags(): Promise<TagEntity[]> {
+  let tags = await this.cacheManager.get('tags');
+  if (!tags) {
+    tags = await this.tagRepository.find();
+    await this.cacheManager.set('tags', tags, { ttl: 3600 });
+  }
+  return tags;
+}
+```
+
+### 4. Оптимизации и улучшения
+
+1. Производительность:
+```typescript
+// Добавить индексы
+@Entity()
+@Index(['title'])
+export class ArticleEntity {
+  @Column({ type: 'text' })
+  @Index()
+  title: string;
+}
+```
+
+2. Безопасность:
+```typescript
+// Проверка владельца статьи
+private async validateOwnership(articleId: ArticleID, userId: number): Promise<void> {
+  const article = await this.articleRepository.findOne({
+    where: { id: articleId, user_id: userId }
+  });
+  if (!article) {
+    throw new ForbiddenException();
+  }
+}
+```
+
+3. Обработка ошибок:
+```typescript
+public async findOne(articleId: ArticleID): Promise<ArticleEntity> {
+  const article = await this.articleRepository.findOne({
+    where: { id: articleId },
+    relations: ['tags']
+  });
+  if (!article) {
+    throw new NotFoundException(`Article #${articleId} not found`);
+  }
+  return article;
+}
+```
+
+### 5. Практические примеры
+
+```typescript
+// Создание статьи
+const article = await articlesService.create(userData, {
+  title: 'New Article',
+  content: 'Content',
+  tags: ['nodejs', 'nestjs']
+});
+
+// Обновление статьи
+const updated = await articlesService.update(userData, articleId, {
+  title: 'Updated Title'
+});
+
+// Обработка ошибок
+try {
+  const article = await articlesService.findOne(999);
+} catch (error) {
+  if (error instanceof NotFoundException) {
+    // Handle not found
+  }
+}
+
+// Тестирование
+describe('ArticlesService', () => {
+  it('should create article with tags', async () => {
+    const article = await service.create(mockUserData, mockCreateDto);
+    expect(article.tags).toHaveLength(mockCreateDto.tags.length);
+  });
+});
+```
+
+### Рекомендации по улучшению:
+
+1. Добавить валидацию входных данных
+2. Реализовать систему кэширования
+3. Добавить логирование операций
+4. Внедрить транзакции для атомарных операций
+5. Реализовать систему версионирования статей
+6. Добавить полнотекстовый поиск
+7. Внедрить систему событий для реакции на изменения
+------------------
+
+Далее в папке src/modules/articles/models/dto/res создадим фйл article.res.dto.ts
+import { ApiProperty } from '@nestjs/swagger';
+
+import { UserResDto } from '../../../../users/models/dto/res/user.res.dto';
+
+export class ArticleResDto {
+  @ApiProperty({
+    example: '796cea24-a328-4463-a5e1-85a779e4780f',
+    description: 'Article ID',
+  })
+  id: string;
+
+  @ApiProperty({
+    example: 'Article Title',
+    description: 'Article Title',
+  })
+  title: string;
+
+  @ApiProperty({
+    example: 'Article Description',
+    description: 'Article Description',
+  })
+  description: string;
+
+  @ApiProperty({
+    example: 'Article Body',
+    description: 'Article Body',
+  })
+  body: string;
+
+  @ApiProperty({
+    example: '2021-09-29T10:00:00.000Z',
+    description: 'Article Created Date',
+  })
+  created: Date;
+
+  @ApiProperty({
+    example: '2021-09-29T10:00:00.000Z',
+    description: 'Article Updated Date',
+  })
+  updated: Date;
+
+  @ApiProperty({
+    example: ['tag1', 'tag2'],
+    description: 'Article Tags',
+  })
+  tags: string[];
+
+  user?: UserResDto;
+}
+
+## Анализ кода ArticleResDto
+
+### 1. Общий обзор
+
+ArticleResDto - это класс передачи данных (DTO), предназначенный для сериализации ответов API, связанных со статьями.
+
+Место в архитектуре:
+- Часть слоя представления (Response Layer)
+- Интегрируется с Swagger для автоматической генерации документации API
+- Используется для трансформации данных между бизнес-логикой и клиентом
+
+### 2. Детальный разбор
+
+```typescript
+import { ApiProperty } from '@nestjs/swagger';
+```
+- Импорт декоратора из @nestjs/swagger для документирования API
+- Используется для генерации OpenAPI спецификации
+- [Документация Swagger](https://docs.nestjs.com/openapi/types-and-parameters)
+
+```typescript
+export class ArticleResDto {
+```
+- Определение класса DTO для ответов API
+- Экспортируется для использования в других модулях
+- Следует паттерну Response DTO
+
+```typescript
+@ApiProperty({
+  example: '796cea24-a328-4463-a5e1-85a779e4780f',
+  description: 'Article ID',
+})
+id: string;
+```
+- Декоратор описывает свойство для Swagger
+- Пример значения в формате UUID
+- Описание поля для документации
+- [Swagger Decorators](https://docs.nestjs.com/openapi/decorators)
+
+### 3. Возможности расширения
+
+1. Добавление валидации:
+```typescript
+import { IsUUID, IsString, IsArray, IsDate, IsOptional } from 'class-validator';
+
+export class ArticleResDto {
+  @IsUUID()
+  @ApiProperty()
+  id: string;
+
+  @IsString()
+  @ApiProperty()
+  title: string;
+}
+```
+
+2. Добавление сериализации:
+```typescript
+import { Expose, Transform } from 'class-transformer';
+
+export class ArticleResDto {
+  @Expose()
+  @Transform(({ value }) => value.toISOString())
+  @ApiProperty()
+  created: Date;
+}
+```
+
+3. Расширение метаданных:
+```typescript
+export class ArticleResDto {
+  @ApiProperty({
+    deprecated: false,
+    required: true,
+    nullable: false,
+    enum: ['draft', 'published'],
+    default: 'draft'
+  })
+  status: string;
+}
+```
+
+### 4. Оптимизации и улучшения
+
+1. Безопасность:
+```typescript
+export class ArticleResDto {
+  @Exclude()
+  private sensitiveData: string;
+
+  @ApiProperty({
+    description: 'Sanitized content',
+    example: '<p>Safe HTML content</p>'
+  })
+  @Transform(({ value }) => sanitizeHtml(value))
+  body: string;
+}
+```
+
+2. Производительность:
+```typescript
+export class ArticleResDto {
+  @ApiProperty()
+  @Transform(({ value }) => value.substring(0, 100))
+  preview: string;
+
+  @Type(() => UserPreviewDto)
+  user?: UserPreviewDto;
+}
+```
+
+3. Версионирование:
+```typescript
+@ApiVersion('2')
+export class ArticleResDto_v2 extends ArticleResDto {
+  @ApiProperty()
+  additionalField: string;
+}
+```
+
+### 5. Практические примеры
+
+1. Базовое использование:
+```typescript
+@Controller('articles')
+export class ArticlesController {
+  @Get(':id')
+  @ApiResponse({ type: ArticleResDto })
+  async findOne(@Param('id') id: string): Promise<ArticleResDto> {
+    const article = await this.service.findOne(id);
+    return plainToClass(ArticleResDto, article);
+  }
+}
+```
+
+2. Трансформация данных:
+```typescript
+const article = {
+  id: '796cea24-a328-4463-a5e1-85a779e4780f',
+  title: 'Test Article',
+  created: new Date(),
+  user: {
+    id: 1,
+    name: 'John'
+  }
+};
+
+const response = plainToClass(ArticleResDto, article, {
+  excludeExtraneousValues: true
+});
+```
+
+3. Тестирование:
+```typescript
+describe('ArticleResDto', () => {
+  it('should transform date to ISO string', () => {
+    const dto = plainToClass(ArticleResDto, {
+      created: new Date('2023-01-01')
+    });
+    expect(dto.created).toBe('2023-01-01T00:00:00.000Z');
+  });
+});
+```
+
+### Рекомендации по улучшению:
+
+1. Добавить валидацию всех полей:
+```typescript
+export class ArticleResDto {
+  @IsUUID()
+  @IsNotEmpty()
+  @ApiProperty()
+  id: string;
+
+  @IsString()
+  @MinLength(3)
+  @MaxLength(100)
+  @ApiProperty()
+  title: string;
+}
+```
+
+2. Внедрить сериализацию чувствительных данных:
+```typescript
+export class ArticleResDto {
+  @Expose()
+  @Transform(({ value }) => value.replace(/[0-9]/g, '*'))
+  @ApiProperty()
+  secureField: string;
+}
+```
+
+3. Добавить документацию для всех сценариев:
+```typescript
+@ApiTags('Articles')
+@ApiResponse({ status: 200, type: ArticleResDto })
+@ApiResponse({ status: 404, description: 'Article not found' })
+```
+
+4. Реализовать версионирование:
+```typescript
+export class ArticleResDto_v2 extends ArticleResDto {
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  additionalInfo?: string;
+}
+```
+
+5. Улучшить типизацию:
+```typescript
+export interface IArticleResponse {
+  article: ArticleResDto;
+  meta: {
+    version: string;
+    generated: Date;
+  };
+}
+```
+
+Эти улучшения повысят:
+- Надежность API
+- Читаемость кода
+- Безопасность данных
+- Удобство поддержки
+- Качество документации
+
+Возможные риски:
+- Увеличение размера ответа API
+- Дополнительные затраты на обработку
+- Необходимость поддержки обратной совместимости
+-------------------
+
+А в папке src/modules/articles/services создадим файл articles.mapper.ts
+import { Injectable } from '@nestjs/common';
+
+import { ArticleEntity } from '../../../database/entities/article.entity';
+import { UserMapper } from '../../users/services/user.mapper';
+import { ArticleResDto } from '../models/dto/res/article.res.dto';
+
+@Injectable()
+export class ArticlesMapper {
+  public static toResDto(data: ArticleEntity): ArticleResDto {
+    return {
+      id: data.id,
+      title: data.title,
+      description: data.description,
+      body: data.body,
+      created: data.created,
+      updated: data.updated,
+      tags: data.tags ? data.tags.map((tag) => tag.name) : [],
+      user: data.user ? UserMapper.toResDto(data.user) : null,
+    };
+  }
+}
+
+## Анализ кода ArticlesMapper
+
+### 1. Общий обзор
+
+ArticlesMapper - это сервисный класс для преобразования сущностей статей в DTO ответов.
+
+Место в архитектуре:
+- Часть слоя маппинга данных
+- Обеспечивает трансформацию между слоями данных и представления
+- Реализует паттерн Data Mapper
+
+### 2. Детальный разбор
+
+```typescript
+@Injectable()
+```
+- Декоратор NestJS для внедрения зависимостей
+- Позволяет использовать класс как сервис
+- [Документация Injectable](https://docs.nestjs.com/providers)
+
+```typescript
+public static toResDto(data: ArticleEntity): ArticleResDto {
+```
+- Статический метод трансформации
+- Принимает сущность ArticleEntity
+- Возвращает DTO ответа
+- Не требует создания экземпляра класса
+
+```typescript
+tags: data.tags ? data.tags.map((tag) => tag.name) : [],
+```
+- Преобразование массива тегов
+- Условная проверка наличия тегов
+- Извлечение только имен тегов
+- Возврат пустого массива при отсутствии тегов
+
+### 3. Возможности расширения
+
+1. Добавление обратного маппинга:
+```typescript
+public static toEntity(dto: ArticleCreateDto): Partial<ArticleEntity> {
+  return {
+    title: dto.title,
+    description: dto.description,
+    body: dto.body,
+    tags: dto.tags.map(name => ({ name }))
+  };
+}
+```
+
+2. Поддержка частичного маппинга:
+```typescript
+public static toPartialDto(
+  data: Partial<ArticleEntity>
+): Partial<ArticleResDto> {
+  return {
+    ...(data.id && { id: data.id }),
+    ...(data.title && { title: data.title }),
+    ...(data.description && { description: data.description })
+  };
+}
+```
+
+3. Добавление валидации:
+```typescript
+public static toResDtoWithValidation(
+  data: ArticleEntity
+): ArticleResDto {
+  const dto = this.toResDto(data);
+  const errors = validateSync(dto);
+  if (errors.length > 0) {
+    throw new ValidationError(errors);
+  }
+  return dto;
+}
+```
+
+### 4. Оптимизации и улучшения
+
+1. Производительность:
+```typescript
+public static toResDto(data: ArticleEntity): ArticleResDto {
+  // Кэширование преобразованных данных
+  const cacheKey = `article_${data.id}`;
+  const cached = cache.get(cacheKey);
+  if (cached) return cached;
+
+  const result = {
+    // ... маппинг
+  };
+  cache.set(cacheKey, result);
+  return result;
+}
+```
+
+2. Безопасность:
+```typescript
+public static toResDto(data: ArticleEntity): ArticleResDto {
+  return {
+    ...this.sanitizeData({
+      id: data.id,
+      title: data.title,
+      body: this.sanitizeHtml(data.body)
+    }),
+    tags: this.sanitizeTags(data.tags)
+  };
+}
+```
+
+3. Обработка ошибок:
+```typescript
+public static toResDto(data: ArticleEntity): ArticleResDto {
+  try {
+    return {
+      // ... маппинг
+    };
+  } catch (error) {
+    logger.error('Article mapping failed', { articleId: data.id });
+    throw new MappingException(error.message);
+  }
+}
+```
+
+### 5. Практические примеры
+
+1. Базовое использование:
+```typescript
+@Controller('articles')
+export class ArticlesController {
+  @Get(':id')
+  async findOne(@Param('id') id: string): Promise<ArticleResDto> {
+    const article = await this.articlesService.findOne(id);
+    return ArticlesMapper.toResDto(article);
+  }
+}
+```
+
+2. Маппинг коллекций:
+```typescript
+@Get()
+async findAll(): Promise<ArticleResDto[]> {
+  const articles = await this.articlesService.findAll();
+  return articles.map(article => ArticlesMapper.toResDto(article));
+}
+```
+
+3. Тестирование:
+```typescript
+describe('ArticlesMapper', () => {
+  it('should map entity to DTO', () => {
+    const entity = {
+      id: '1',
+      title: 'Test',
+      tags: [{ name: 'tag1' }]
+    };
+
+    const dto = ArticlesMapper.toResDto(entity);
+
+    expect(dto).toEqual({
+      id: '1',
+      title: 'Test',
+      tags: ['tag1']
+    });
+  });
+});
+```
+
+### Рекомендации по улучшению:
+
+1. Добавить интерфейс маппера:
+```typescript
+interface IMapper<Entity, Dto> {
+  toDto(entity: Entity): Dto;
+  toEntity(dto: Partial<Dto>): Partial<Entity>;
+}
+```
+
+2. Внедрить логирование:
+```typescript
+@Injectable()
+export class ArticlesMapper {
+  private static readonly logger = new Logger(ArticlesMapper.name);
+
+  public static toResDto(data: ArticleEntity): ArticleResDto {
+    this.logger.debug(`Mapping article: ${data.id}`);
+    // ... маппинг
+  }
+}
+```
+
+3. Добавить валидацию:
+```typescript
+public static toResDto(data: ArticleEntity): ArticleResDto {
+  const dto = {
+    // ... маппинг
+  };
+
+  validateSync(dto);
+  return dto;
+}
+```
+
+4. Оптимизировать работу с коллекциями:
+```typescript
+public static toDtoList(
+  entities: ArticleEntity[]
+): ArticleResDto[] {
+  return entities.map(this.toResDto);
+}
+```
+
+Эти улучшения обеспечат:
+- Типобезопасность
+- Лучшую производительность
+- Улучшенное логирование
+- Более надежную валидацию
+
+Потенциальные риски:
+- Увеличение сложности кода
+- Дополнительные накладные расходы
+- Необходимость поддержки обратной совместимости
+-------------
+
+Сейчас должно перестать выдавать ошибки.
+Проверим работоспособность через swagger по ендпоинту POST articles После отправки данных в базе данных в
+таблице tags должны появится данные с отправленными тегами.
+
+

@@ -26,7 +26,7 @@ export class CommentEntity extends CreateUpdateModel {
 
   @Column()
   user_id: UserID;
-  @ManyToOne(() => UserEntity, (entity) => entity.comment)
+  @ManyToOne(() => UserEntity, (entity) => entity.comments)
   @JoinColumn({ name: 'user_id' })
   user?: UserEntity;
 

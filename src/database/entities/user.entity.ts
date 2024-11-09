@@ -20,7 +20,7 @@ export class UserEntity extends CreateUpdateModel {
   @Column('text', { unique: true })
   email: string;
 
-  @Column('text')
+  @Column('text', { select: false })
   password: string;
 
   @Column('boolean', { default: true })
@@ -32,6 +32,9 @@ export class UserEntity extends CreateUpdateModel {
   @Column('text', { nullable: true })
   image: string;
 
+  @Column('timestamp', { nullable: true })
+  deleted?: Date;
+
   @OneToMany(() => RefreshTokenEntity, (entity) => entity.user)
   refreshTokens?: RefreshTokenEntity[];
 
@@ -42,7 +45,7 @@ export class UserEntity extends CreateUpdateModel {
   likes?: LikeEntity[];
 
   @OneToMany(() => CommentEntity, (entity) => entity.user)
-  comment?: CommentEntity[];
+  comments?: CommentEntity[];
 
   @OneToMany(() => FollowEntity, (entity) => entity.follower)
   followers?: FollowEntity[];
