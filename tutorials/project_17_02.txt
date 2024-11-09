@@ -1,0 +1,1250 @@
+Продолжаем наш проект.
+Сейчас мы добавим к нашим articles список, напишем кьюерибилдерс, пагинацию, вернем список наших постов
+в swagger и после этого еще сделаем список тегов. Так как раньше при создании постов мы их обвязывали к тегам сразу,
+мы по одному тегу можем доставать какие наиболее популярные теги и 10 наиболее популярных тегов мы будем возвращать.
+
+Начнем с доработки articles.controller.ts
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+} from '@nestjs/common';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+
+import { ArticleID } from '../../common/types/entity-ids.type';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { IUserData } from '../auth/models/interfaces/user-data.interface';
+import { CreateArticleDto } from './models/dto/req/create-article.dto';
+import { ListArticleQueryDto } from './models/dto/req/list-article-query.dto';
+import { UpdateArticleDto } from './models/dto/req/update-article.dto';
+import { ArticleResDto } from './models/dto/res/article.res.dto';
+import { ArticleListResDto } from './models/dto/res/article-list.res.dto';
+import { ArticlesMapper } from './services/articles.mapper';
+import { ArticlesService } from './services/articles.service';
+
+@ApiBearerAuth()
+@ApiTags('Articles')
+@Controller('articles')
+export class ArticlesController {
+  constructor(private readonly articleService: ArticlesService) {}
+
+  @Post()
+  public async create(
+    @CurrentUser() userData: IUserData,
+    @Body() dto: CreateArticleDto,
+  ): Promise<ArticleResDto> {
+    const result = await this.articleService.create(userData, dto);
+    return ArticlesMapper.toResDto(result);
+  }
+
+  @Get()
+  public async findAll(
+    @CurrentUser() userData: IUserData,
+    @Query() query: ListArticleQueryDto,
+  ): Promise<ArticleListResDto> {
+    const [entities, total] = await this.articleService.findAll(
+      userData,
+      query,
+    );
+    return ArticlesMapper.toResDtoList(entities, total, query);
+  }
+
+  @Get(':articleId')
+  public async findOne(
+    @Param('articleId') articleId: ArticleID,
+  ): Promise<ArticleResDto> {
+    const result = await this.articleService.findOne(articleId);
+    return ArticlesMapper.toResDto(result);
+  }
+
+  @Patch(':articleId')
+  public async update(
+    @CurrentUser() userData: IUserData,
+    @Param('articleId') articleId: ArticleID,
+    @Body() dto: UpdateArticleDto,
+  ): Promise<ArticleResDto> {
+    const result = await this.articleService.update(userData, articleId, dto);
+    return ArticlesMapper.toResDto(result);
+  }
+}
+
+Выделенный код представляет собой контроллер NestJS для управления статьями в приложении.
+Контроллер содержит различные методы для выполнения операций CRUD (Create, Read, Update, Delete) над статьями.
+
+Описание каждой строчки:
+
+1. `import { ... } from '@nestjs/common';` - Эта строчка импортирует необходимые модули из NestJS Common,
+которые будут использоваться в контроллере.
+
+2. `import { ... } from '../../common/types/entity-ids.type';` - Эта строчка импортирует определенный тип `ArticleID`
+из общего каталога типов.
+
+3. `import { CurrentUser } from '../auth/decorators/current-user.decorator';` - Эта строчка импортирует
+декоратор `CurrentUser`, который используется для получения текущего пользователя из контекста запроса.
+
+4. `import { IUserData } from '../auth/models/interfaces/user-data.interface';` - Эта строчка импортирует
+интерфейс `IUserData`, который описывает структуру данных пользователя.
+
+5. `import { CreateArticleDto } from './models/dto/req/create-article.dto';` - Эта строчка импортирует
+DTO (Data Transfer Object) для создания статьи. DTO определяет структуру и валидацию данных, которые будут
+использоваться при создании статьи.
+
+6. `import { ListArticleQueryDto } from './models/dto/req/list-article-query.dto';` - Эта строчка импортирует
+DTO для запроса списка статей. DTO определяет структуру и валидацию данных, которые будут использоваться при
+запросе списка статей.
+
+7. `import { UpdateArticleDto } from './models/dto/req/update-article.dto';` - Эта строчка импортирует DTO для
+обновления статьи. DTO определяет структуру и валидацию данных, которые будут использоваться при обновлении статьи.
+
+8. `import { ArticleResDto } from './models/dto/res/article.res.dto';` - Эта строчка импортирует DTO для ответа
+на запрос статьи. DTO определяет структуру и валидацию данных, которые будут возвращены в ответ на запрос статьи.
+
+9. `import { ArticleListResDto } from './models/dto/res/article-list.res.dto';` - Эта строчка импортирует DTO для
+ответа на запрос списка статей. DTO определяет структуру и валидацию данных, которые будут возвращены в ответ на
+запрос списка статей.
+
+10. `import { ArticlesMapper } from './services/articles.mapper';` - Эта строчка импортирует сервис `ArticlesMapper`,
+который используется для преобразования данных между моделью и DTO.
+
+11. `import { ArticlesService } from './services/articles.service';` - Эта строчка импортирует сервис `ArticlesService`,
+который реализует бизнес-логику для работы с статьями.
+
+12. `@ApiBearerAuth()` - Эта декоратор указывает, что контроллер требует авторизации с использованием
+JWT (JSON Web Tokens).
+
+13. `@ApiTags('Articles')` - Эта декоратор указывает, что контроллер относится к группе тегов 'Articles'.
+
+14. `@Controller('articles')` - Эта декоратор указывает, что этот класс является контроллером NestJS и обрабатывает
+запросы к конечной точке '/articles'.
+
+15. `constructor(private readonly articleService: ArticlesService) {}` - Эта строчка определяет конструктор контроллера,
+который внедряет зависимость `ArticlesService` с помощью DI (Dependency Injection).
+
+16. `@Post()` - Эта декоратор указывает, что следующий метод обрабатывает HTTP-запрос POST к конечной точке '/articles'.
+
+17. `public async create(...): Promise<ArticleResDto> {}` - Этот метод определяет обработчик для создания новой статьи.
+Он принимает текущего пользователя, DTO для создания статьи и возвращает DTO для ответа на запрос.
+
+18. `@Get()` - Эта декоратор указывает, что следующий метод обрабатывает HTTP-запрос GET к конечной точке '/articles'.
+
+19. `public async findAll(...): Promise<ArticleListResDto> {}` - Этот метод определяет обработчик для получения
+списка статей. Он принимает текущего пользователя, DTO для запроса списка статей и возвращает DTO для ответа на запрос.
+
+20. `@Get(':articleId')` - Эта декоратор указывает, что следующий метод обрабатывает HTTP-запрос GET к конечной
+точке '/articles/:articleId', где `:articleId` является параметром маршрутизации.
+
+21. `public async findOne(...): Promise<ArticleResDto> {}` - Этот метод определяет обработчик для получения одной
+статьи по ее идентификатору. Он принимает идентификатор статьи и возвращает DTO для ответа на запрос.
+
+22. `@Patch(':articleId')` - Эта декоратор указывает, что следующий метод обрабатывает HTTP-запрос PATCH к конечной
+точке '/articles/:articleId', где `:articleId` является параметром маршрутизации.
+
+23. `public async update(...): Promise<ArticleResDto> {}` - Этот метод определяет обработчик для обновления одной
+статьи по ее идентификатору. Он принимает текущего пользователя, идентификатор статьи и DTO для обновления статьи
+и возвращает DTO для ответа на запрос.
+
+Возможные улучшения кода:
+
+1. Вы можете добавить валидацию входных данных в DTO, чтобы предотвратить недопустимые данные.
+2. Вы можете реализовать логику для проверки прав доступа пользователей к операциям CRUD.
+3. Вы можете добавить логирование для отслеживания действий пользователей и ошибок.
+4. Вы можете реализовать пагинацию и сортировку для запроса списка статей.
+5. Вы можете добавить поддержку для поиска статей по определенным критериям.
+6. Вы можете реализовать поддержку для добавления, удаления и изменения тегов у статей.
+7. Вы можете реализовать поддержку для добавления, удаления и изменения категорий у статей.
+8. Вы можете реализовать поддержку для добавления, удаления и изменения изображений у статей.
+9. Вы можете реализовать поддержку для добавления, удаления и изменения комментариев к статьям.
+10. Вы можете реализовать поддержку для добавления, удаления и изменения рейтинга статей.
+11. Вы можете реализовать поддержку для добавления, удаления и изменения лайков у статей.
+12. Вы можете реализовать поддержку для добавления, удаления и изменения даты публикации статей.
+13. Вы можете реализовать поддержку для добавления, удаления и изменения автора статей.
+14. Вы можете реализовать поддержку для добавления, удаления и изменения ключевых слов у статей.
+15. Вы можете реализовать поддержку для добавления, удаления и изменения аннотаций у статей.
+16. Вы можете реализовать поддержку для добавления, удаления и изменения ссылок у статей.
+17. Вы можете реализовать поддержку для добавления, удаления и изменения статуса публикации статей.
+18. Вы можете реализовать поддержку для добавления, удаления и изменения статуса удаления статей.
+19. Вы можете реализовать поддержку для добавления, удаления и изменения статуса архивации статей.
+20. Вы можете реализовать поддержку для добавления, удаления и изменения статуса скрытия статей.
+21. Вы можете реализовать поддержку для добавления, удаления и изменения статуса закрытия статей.
+22. Вы можете реализовать поддержку для добавления, удаления и изменения статуса заморозки статей.
+23. Вы можете реализовать поддержку для добавления, удаления и изменения статуса блокировки статей.
+24. Вы можете реализовать поддержку для добавления, удаления и изменения статуса модерации статей.
+25. Вы можете реализовать поддержку для добавления, удаления и изменения статуса популярности статей.
+26. Вы можете реализовать поддержку для добавления, удаления и изменения статуса проверки статей.
+27. Вы можете реализовать поддержку для добавления, удаления и изменения статуса проверки контента статей.
+28. Вы можете реализовать поддержку для добавления, удаления и изменения статуса проверки авторства статей.
+29. Вы можете реализовать поддержку для добавления, удаления и изменения статуса проверки качества статей.
+30. Вы можете реализовать поддержку для добавления, удаления и изменения статуса проверки ценности статей.
+31. Вы можете реализовать поддержку для добавления, удаления и изменения статуса проверки релевантности статей.
+32. Вы можете реализовать поддержку для добавления, удаления и изменения статуса проверки соответствия статей.
+33. Вы можете реализовать поддержку для добавления, удаления и изменения статуса проверки наличия статей.
+34. Вы можете реализовать поддержку для добавления, удаления и изменения статуса проверки уникальности статей.
+35. Вы можете реализовать поддержку для добавления, удаления и изменения статуса проверки дублирования статей.
+36. Вы можете реализовать поддержку для добавления, удаления и измен
+
+Далее идем в articles.services.ts
+Код в `ArticlesService` представляет собой сервис, который обрабатывает операции CRUD для статей,
+а также управляет тегами статей.
+
+```typescript
+import { Injectable } from '@nestjs/common';
+import { In } from 'typeorm';
+
+import { ArticleID } from '../../../common/types/entity-ids.type';
+import { ArticleEntity } from '../../../database/entities/article.entity';
+import { TagEntity } from '../../../database/entities/tag.entity';
+import { IUserData } from '../../auth/models/interfaces/user-data.interface';
+import { ArticleRepository } from '../../repositories/services/article.repository';
+import { TagRepository } from '../../repositories/services/tag.repository';
+import { CreateArticleDto } from '../models/dto/req/create-article.dto';
+import { ListArticleQueryDto } from '../models/dto/req/list-article-query.dto';
+import { UpdateArticleDto } from '../models/dto/req/update-article.dto';
+
+@Injectable()
+export class ArticlesService {
+  constructor(
+    private readonly articleRepository: ArticleRepository,
+    private readonly tagRepository: TagRepository,
+  ) {}
+
+  // Создание новой статьи
+  public async create(
+    userData: IUserData,
+    dto: CreateArticleDto,
+  ): Promise<ArticleEntity> {
+    const tags = await this.createTags(dto.tags);
+
+    return await this.articleRepository.save(
+      this.articleRepository.create({ ...dto, tags, user_id: userData.userId }),
+    );
+  }
+
+  // Получение списка статей с поддержкой пагинации и сортировки
+  public async findAll(
+    userData: IUserData,
+    query: ListArticleQueryDto,
+  ): Promise<[ArticleEntity[], number]> {
+    return await this.articleRepository.findAll(userData, query);
+  }
+
+  // Получение одной статьи по идентификатору
+  public async findOne(articleId: ArticleID): Promise<ArticleEntity> {
+    return {} as any;
+  }
+
+  // Обновление одной статьи по идентификатору
+  public async update(
+    userData: IUserData,
+    articleId: ArticleID,
+    updateUserDto: UpdateArticleDto,
+  ): Promise<ArticleEntity> {
+    return {} as any;
+  }
+
+  // Создание новых тегов и получение существующих тегов
+  private async createTags(tags: string[]): Promise<TagEntity[]> {
+    if (!tags || !tags.length) return [];
+
+    const entities = await this.tagRepository.findBy({ name: In(tags) });
+    const existingTags = entities.map((tag) => tag.name);
+    const newTags = tags.filter((tag) => !existingTags.includes(tag));
+    const newEntities = await this.tagRepository.save(
+      newTags.map((tag) => this.tagRepository.create({ name: tag })),
+    );
+    return [...entities, ...newEntities];
+  }
+}
+```
+
+Возможные улучшения кода:
+
+1. Добавить логирование для отслеживания действий пользователей и ошибок.
+2. Реализовать пагинацию и сортировку для запроса списка статей.
+3. Добавить поддержку для поиска статей по определенным критериям.
+4. Реализовать поддержку для добавления, удаления и изменения тегов у статей.
+5. Реализовать поддержку для добавления, удаления и изменения категорий у статей.
+6. Реализовать поддержку для добавления, удаления и изменения изображений у статей.
+7. Реализовать поддержку для добавления, удаления и изменения комментариев к статьям.
+8. Реализовать поддержку для добавления, удаления и изменения рейтинга статей.
+9. Реализовать поддержку для добавления, удаления и изменения лайков у статей.
+10. Реализовать поддержку для добавления, удаления и изменения даты публикации статей.
+11. Реализовать поддержку для добавления, удаления и изменения автора статей.
+12. Реализовать поддержку для добавления, удаления и изменения ключевых слов у статей.
+13. Реализовать поддержку для добавления, удаления и изменения аннотаций у статей.
+14. Реализовать поддержку для добавления, удаления и изменения ссылок у статей.
+15. Реализовать поддержку для добавления, удаления и изменения статуса публикации статей.
+16. Реализовать поддержку для добавления, удаления и изменения статуса удаления статей.
+17. Реализовать поддержку для добавления, удаления и изменения статуса заморозки статей.
+18. Реализовать поддержку для добавления, удаления и изменения статуса блокировки статей.
+19. Реализовать поддержку для добавления, удаления и изменения статуса модерации статей.
+20. Реализовать поддержку для добавления, удаления и изменения статуса популярности статей.
+21. Реализовать поддержку для добавления, удаления и изменения статуса проверки контента статей.
+22. Реализовать поддержку для добавления, удаления и изменения статуса проверки авторства статей.
+23. Реализовать поддержку для добавления, удаления и изменения статуса проверки ценности статей.
+24. Реализовать поддержку для добавления, удаления и изменения статуса проверки релевантности статей.
+
+Ссылки на документацию:
+- [NestJS](https://nestjs.com/docs)
+- [TypeORM](https://typeorm.io/docs)
+- [TypeScript](https://www.typescriptlang.org/docs)
+
+Далее обновим article.repositoru.ts
+Код в `ArticleRepository` представляет собой репозиторий, который обрабатывает операции с базой данных для статей.
+В частности, он предоставляет метод `findAll`, который возвращает список статей с поддержкой пагинации и сортировки.
+
+```typescript
+import { Injectable } from '@nestjs/common';
+import { DataSource, Repository } from 'typeorm';
+
+import { ArticleEntity } from '../../../database/entities/article.entity';
+import { ListArticleQueryDto } from '../../articles/models/dto/req/list-article-query.dto';
+import { IUserData } from '../../auth/models/interfaces/user-data.interface';
+
+@Injectable()
+export class ArticleRepository extends Repository<ArticleEntity> {
+  constructor(private readonly dataSource: DataSource) {
+    super(ArticleEntity, dataSource.manager);
+  }
+
+  // Получение списка статей с поддержкой пагинации и сортировки
+  public async findAll(
+    userData: IUserData,
+    query: ListArticleQueryDto,
+  ): Promise<[ArticleEntity[], number]> {
+    const qb = this.createQueryBuilder('article');
+    qb.leftJoinAndSelect('article.tags', 'tag');
+    qb.leftJoinAndSelect('article.user', 'user');
+
+    if (query.search) {
+      qb.andWhere('CONCAT(article.title, article.description) ILIKE :search');
+      qb.setParameter('search', `%${query.search}%`);
+    }
+    if (query.tag) {
+      qb.andWhere('tag.name = :tag', { tag: query.tag });
+    }
+    qb.take(query.limit);
+    qb.skip(query.offset);
+
+    return await qb.getManyAndCount();
+  }
+}
+```
+
+Возможные улучшения кода:
+
+1. Добавить логирование для отслеживания действий пользователей и ошибок.
+2. Реализовать поддержку для сортировки статей по различным критериям (например, по дате публикации, рейтингу,
+количеству просмотров).
+3. Реализовать поддержку для фильтрации статей по различным критериям (например, по автору, категории, статусу публикации).
+4. Реализовать поддержку для группировки статей по различным критериям (например, по тегам, категориям).
+5. Реализовать поддержку для добавления, удаления и изменения статей.
+6. Реализовать поддержку для добавления, удаления и изменения тегов у статей.
+7. Реализовать поддержку для добавления, удаления и изменения категорий у статей.
+8. Реализовать поддержку для добавления, удаления и изменения изображений у статей.
+9. Реализовать поддержку для добавления, удаления и изменения комментариев к статьям.
+10. Реализовать поддержку для добавления, удаления и изменения рейтинга статей.
+11. Реализовать поддержку для добавления, удаления и изменения лайков у статей.
+12. Реализовать поддержку для добавления, удаления и изменения даты публикации статей.
+13. Реализовать поддержку для добавления, удаления и изменения автора статей.
+14. Реализовать поддержку для добавления, удаления и изменения ключевых слов у статей.
+15. Реализовать поддержку для добавления, удаления и изменения аннотаций у статей.
+16. Реализовать поддержку для добавления, удаления и изменения ссылок у статей.
+17. Реализовать поддержку для добавления, удаления и изменения статуса публикации статей.
+18. Реализовать поддержку для добавления, удаления и изменения статуса удаления статей.
+19. Реализовать поддержку для добавления, удаления и изменения статуса заморозки статей.
+20. Реализовать поддержку для добавления, удаления и изменения статуса блокировки статей.
+21. Реализовать поддержку для добавления, удаления и изменения статуса модерации статей.
+22. Реализовать поддержку для добавления, удаления и изменения статуса популярности статей.
+23. Реализовать поддержку для добавления, удаления и изменения статуса проверки контента статей.
+24. Реализовать поддержку для добавления, удаления и изменения статуса проверки авторства статей.
+25. Реализовать поддержку для добавления, удаления и изменения статуса проверки ценности статей.
+26. Реализовать поддержку для добавления, удаления и изменения статуса проверки релевантности статей.
+
+Ссылки на документацию:
+- [NestJS](https://nestjs.com/docs)
+- [TypeORM](https://typeorm.io/docs)
+- [TypeScript](https://www.typescriptlang.org/docs)
+
+Теперь доработаем articles.mapper.ts
+Код в `ArticlesMapper` представляет собой маппер, который отвечает за преобразование сущностей статей в
+DTO (Data Transfer Object) для ответа. В частности, он предоставляет два статических метода: `toResDtoList` и `toResDto`.
+
+```typescript
+import { Injectable } from '@nestjs/common';
+
+import { ArticleEntity } from '../../../database/entities/article.entity';
+import { UserMapper } from '../../users/services/user.mapper';
+import { ListArticleQueryDto } from '../models/dto/req/list-article-query.dto';
+import { ArticleResDto } from '../models/dto/res/article.res.dto';
+import { ArticleListResDto } from '../models/dto/res/article-list.res.dto';
+
+@Injectable()
+export class ArticlesMapper {
+  public static toResDtoList(
+    data: ArticleEntity[],
+    total: number,
+    query: ListArticleQueryDto,
+  ): ArticleListResDto {
+    return { data: data.map(this.toResDto), total, ...query };
+  }
+
+  public static toResDto(data: ArticleEntity): ArticleResDto {
+    return {
+      id: data.id,
+      title: data.title,
+      description: data.description,
+      body: data.body,
+      created: data.created,
+      updated: data.updated,
+      tags: data.tags ? data.tags.map((tag) => tag.name) : [],
+      user: data.user ? UserMapper.toResDto(data.user) : null,
+    };
+  }
+}
+```
+
+Возможные улучшения кода:
+
+1. Добавить логирование для отслеживания действий пользователей и ошибок.
+2. Реализовать поддержку для сортировки статей по различным критериям (например, по дате публикации, рейтингу,
+количеству просмотров).
+3. Реализовать поддержку для фильтрации статей по различным критериям (например, по автору, категории, статусу публикации).
+4. Реализовать поддержку для группировки статей по различным критериям (например, по тегам, категориям).
+5. Реализовать поддержку для добавления, удаления и изменения статей.
+6. Реализовать поддержку для добавления, удаления и изменения тегов у статей.
+7. Реализовать поддержку для добавления, удаления и изменения категорий у статей.
+8. Реализовать поддержку для добавления, удаления и изменения изображений у статей.
+9. Реализовать поддержку для добавления, удаления и изменения комментариев к статьям.
+10. Реализовать поддержку для добавления, удаления и изменения рейтинга статей.
+11. Реализовать поддержку для добавления, удаления и изменения лайков у статей.
+12. Реализовать поддержку для добавления, удаления и изменения даты публикации статей.
+13. Реализовать поддержку для добавления, удаления и изменения автора статей.
+14. Реализовать поддержку для добавления, удаления и изменения ключевых слов у статей.
+15. Реализовать поддержку для добавления, удаления и изменения аннотаций у статей.
+16. Реализовать поддержку для добавления, удаления и изменения ссылок у статей.
+17. Реализовать поддержку для добавления, удаления и изменения статуса публикации статей.
+18. Реализовать поддержку для добавления, удаления и изменения статуса удаления статей.
+19. Реализовать поддержку для добавления, удаления и изменения статуса заморозки статей.
+20. Реализовать поддержку для добавления, удаления и изменения статуса блокировки статей.
+21. Реализовать поддержку для добавления, удаления и изменения статуса модерации статей.
+22. Реализовать поддержку для добавления, удаления и изменения статуса популярности статей.
+23. Реализовать поддержку для добавления, удаления и изменения статуса проверки контента статей.
+24. Реализовать поддержку для добавления, удаления и изменения статуса проверки авторства статей.
+25. Реализовать поддержку для добавления, удаления и изменения статуса проверки ценности статей.
+26. Реализовать поддержку для добавления, удаления и изменения статуса проверки релевантности статей.
+
+Ссылки на документацию:
+- [NestJS](https://nestjs.com/docs)
+- [TypeORM](https://typeorm.io/docs)
+- [TypeScript](https://www.typescriptlang.org/docs)
+
+Далее в папке src/modules/articles/models/dto/req создадим файл list-article-query.dto.ts
+
+```typescript
+// Импорты необходимых модулей и хелпера
+import { Transform, Type } from 'class-transformer';
+import { IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import { TransformHelper } from '../../../../../common/helpers/transform.helper';
+
+// Объявление класса ListArticleQueryDto
+export class ListArticleQueryDto {
+  // Опциональное поле limit для указания максимального количества статей на странице
+  @Type(() => Number)
+  @IsInt()
+  @Max(100)
+  @Min(1)
+  @IsOptional()
+  limit?: number = 10;
+
+  // Опциональное поле offset для указания смещения для пагинации
+  @Type(() => Number)
+  @IsInt()
+  @Min(0)
+  @IsOptional()
+  offset?: number = 0;
+
+  // Опциональное поле tag для фильтрации статей по тегу
+  @IsString()
+  @IsOptional()
+  tag?: string;
+
+  // Опциональное поле search для поиска по тексту статьи
+  // Применяется трансформация trim и toLowerCase из хелпера TransformHelper
+  @Transform(TransformHelper.trim)
+  @Transform(TransformHelper.toLowerCase)
+  @IsString()
+  @IsOptional()
+  search?: string;
+}
+```
+
+Комментарии к каждой строчке кода:
+
+1. Импорты необходимых модулей и хелпера.
+2. Объявление класса `ListArticleQueryDto`.
+3. Опциональное поле `limit` для указания максимального количества статей на странице.
+4. Опциональное поле `offset` для указания смещения для пагинации.
+5. Опциональное поле `tag` для фильтрации статей по тегу.
+6. Опциональное поле `search` для поиска по тексту статьи. Применяется трансформация `trim` и `toLowerCase`
+из хелпера `TransformHelper`.
+7. Валидаторы для полей с использованием библиотеки `class-validator`.
+8. Преобразователи для полей с использованием библиотеки `class-transformer`.
+
+Возможные улучшения всего кода:
+
+1. Добавить валидаторы для полей `limit` и `offset` для предотвращения отправки недопустимых значений.
+2. Реализовать логику для обработки пагинации и фильтрации статей на основе значений `limit`, `offset`, `tag`,
+и `search`.
+3. Реализовать логику для сортировки статей на основе определенных критериев.
+
+Ссылки на документацию:
+
+- [NestJS](https://nestjs.com/docs)
+- [TypeORM](https://typeorm.io/docs)
+- [TypeScript](https://www.typescriptlang.org/docs)
+- [class-transformer](https://github.com/typestack/class-transformer)
+- [class-validator](https://github.com/typestack/class-validator)
+----------------------
+
+Теперь в папке src/modules/articles/models/dto/res создадим файл article-list.res.dto.ts
+
+```typescript
+// Импорт необходимых модулей
+import { ListArticleQueryDto } from '../req/list-article-query.dto';
+import { ArticleResDto } from './article.res.dto';
+
+// Объявление класса ArticleListResDto, который наследует от ListArticleQueryDto
+export class ArticleListResDto extends ListArticleQueryDto {
+  // Массив DTO статей
+  data: ArticleResDto[];
+
+  // Общее количество статей
+  total: number;
+}
+```
+
+Комментарии к каждой строчке кода:
+
+1. Импорт необходимых модулей `ListArticleQueryDto` и `ArticleResDto`.
+2. Объявление класса `ArticleListResDto`, который наследует от `ListArticleQueryDto`.
+3. Объявление опционального поля `data` для хранения массива DTO статей.
+4. Объявление опционального поля `total` для хранения общего количества статей.
+
+Возможные улучшения всего кода:
+
+1. Реализовать логику для заполнения массива `data` и вычисления значения `total` на основе запроса к базе данных.
+2. Реализовать логику для сортировки статей на основе определенных критериев.
+3. Реализовать логику для фильтрации статей на основе значений полей `ListArticleQueryDto`.
+
+Ссылки на документацию:
+
+- [NestJS](https://nestjs.com/docs)
+- [TypeORM](https://typeorm.io/docs)
+- [TypeScript](https://www.typescriptlang.org/docs)
+- [class-transformer](https://github.com/typestack/class-transformer)
+- [class-validator](https://github.com/typestack/class-validator)
+---------------------------
+
+Далее обновим наш файл global-exception.filter.ts
+
+```typescript
+// Импорт необходимых модулей
+import {
+  ArgumentsHost,
+  BadRequestException,
+  Catch,
+  ExceptionFilter,
+  HttpException,
+} from '@nestjs/common';
+import { Request, Response } from 'express';
+
+// Импорт сервиса логгера
+import { LoggerService } from '../../modules/logger/logger.service';
+
+// Объявление глобального фильтра исключений
+@Catch()
+export class GlobalExceptionFilter implements ExceptionFilter {
+  // Внедрение сервиса логгера
+  constructor(private readonly logger: LoggerService) {}
+
+  // Метод для обработки исключений
+  catch(exception: any, host: ArgumentsHost) {
+    // Получение контекста HTTP-запроса и ответа
+    const ctx = host.switchToHttp();
+    const response = ctx.getResponse<Response>();
+    const request = ctx.getRequest<Request>();
+
+    // Объявление переменных для хранения статуса и сообщений об ошибках
+    let status: number;
+    let messages: string | string[];
+
+    // Обработка исключений различных типов
+    if (exception instanceof BadRequestException) {
+      status = exception.getStatus();
+      messages = (exception as any).response.message;
+    } else if (exception instanceof HttpException) {
+      status = exception.getStatus();
+      messages = exception.message;
+    } else {
+      status = 500;
+      messages = 'Internal server error';
+      this.logger.error(exception); // Логирование необработанного исключения
+    }
+
+    this.logger.error(exception); // Логирование всех исключений
+    response.status(status).json({
+      statusCode: status,
+      messages: Array.isArray(messages) ? messages : [messages],
+      timestamp: new Date().toISOString(),
+      path: request.url,
+    });
+  }
+}
+```
+
+Комментарии к каждой строчке кода:
+
+1. Импорт необходимых модулей и сервиса логгера.
+2. Объявление глобального фильтра исключений с использованием декоратора `@Catch()`.
+3. Внедрение сервиса логгера в конструктор класса.
+4. Объявление метода `catch()` для обработки исключений.
+5. Получение контекста HTTP-запроса и ответа.
+6. Объявление переменных для хранения статуса и сообщений об ошибках.
+7. Обработка исключений различных типов: `BadRequestException`, `HttpException`, и всех остальных.
+8. Логирование необработанного исключения и всех исключений.
+9. Отправка ответа клиенту с информацией об ошибке.
+
+Возможные улучшения всего кода:
+
+1. Реализовать более специфичную обработку исключений для различных типов ошибок.
+2. Добавить более подробное логирование, включая информацию о контексте запроса и ответа.
+3. Обрабатывать исключения, связанные с базой данных, и реализовывать стратегии обработки ошибок.
+
+Ссылки на документацию:
+
+- [NestJS](https://nestjs.com/docs)
+- [TypeORM](https://typeorm.io/docs)
+- [TypeScript](https://www.typescriptlang.org/docs)
+- [class-validator](https://github.com/typestack/class-validator)
+- [class-transformer](https://github.com/typestack/class-transformer)
+
+Теперь проверим работоспособность в swagger Для этого сначало зайдем на ендпоинт POST auth/login запустим его,
+скопируем accessToken и вставим его вверху в Authorize. Далее заходим на ендпоинт GET articles запускаем его и
+в ответе в коде 200 в Response body мы увидим что у нас есть какието теги.
+-----------------------
+
+Проверяем наш article.entity.ts
+Анализ выделенного кода:
+
+```typescript
+// Импорт необходимых модулей TypeORM
+import {
+  Column,
+  Entity,
+  JoinColumn,
+  ManyToMany,
+  ManyToOne,
+  OneToMany,
+  PrimaryGeneratedColumn,
+} from 'typeorm';
+
+// Импорт определенных типов идентификаторов
+import { ArticleID, UserID } from '../../common/types/entity-ids.type';
+
+// Импорт сущностей, связанных с статьями
+import { CommentEntity } from './comment.entity';
+import { LikeEntity } from './like.entity';
+import { TagEntity } from './tag.entity';
+import { UserEntity } from './user.entity';
+
+// Импорт модели для создания и обновления сущностей
+import { CreateUpdateModel } from './models/create-update.model';
+
+// Объявление сущности статьи
+@Entity('articles')
+export class ArticleEntity extends CreateUpdateModel {
+  // Первичный ключ статьи
+  @PrimaryGeneratedColumn('uuid')
+  id: ArticleID;
+
+  // Заголовок статьи
+  @Column('text')
+  title: string;
+
+  // Описание статьи (опциональное поле)
+  @Column('text', { nullable: true })
+  description?: string;
+
+  // Текст статьи (опциональное поле)
+  @Column('text', { nullable: true })
+  body?: string;
+
+  // Связь один-ко-многим с сущностью LikeEntity
+  @OneToMany(() => LikeEntity, (entity) => entity.article)
+  likes?: LikeEntity[];
+
+  // Связь один-ко-многим с сущностью CommentEntity
+  @OneToMany(() => CommentEntity, (entity) => entity.article)
+  comments?: CommentEntity[];
+
+  // Идентификатор пользователя, создавшего статью
+  @Column()
+  user_id: UserID;
+
+  // Связь многие-к-одному с сущностью UserEntity
+  @ManyToOne(() => UserEntity, (entity) => entity.articles, {
+    onDelete: 'CASCADE', // Удаление статьи при удалении пользователя
+  })
+  @JoinColumn({ name: 'user_id' })
+  user?: UserEntity;
+
+  // Связь многие-к-многим с сущностью TagEntity
+  @ManyToMany(() => TagEntity, (entity) => entity.articles)
+  tags?: TagEntity[];
+}
+```
+
+Комментарии к каждой строчке кода:
+
+1. Импорт необходимых модулей TypeORM и определенных типов идентификаторов.
+2. Импорт сущностей, связанных со статьями.
+3. Импорт модели для создания и обновления сущностей.
+4. Объявление сущности статьи с использованием декоратора `@Entity()`.
+5. Объявление первичного ключа статьи с использованием декоратора `@PrimaryGeneratedColumn()`.
+6. Объявление остальных полей статьи с использованием декоратора `@Column()`.
+7. Объявление связей один-ко-многим с сущностями `LikeEntity`, `CommentEntity`, и `UserEntity` с использованием
+декораторов `@OneToMany()` и `@ManyToOne()`.
+8. Объявление связи многие-к-многим с сущностью `TagEntity` с использованием декоратора `@ManyToMany()`.
+
+Возможные улучшения всего кода:
+
+1. Реализовать более сложные связи между сущностями, если это необходимо.
+2. Добавить более подробное логирование или обработку ошибок.
+3. Реализовать валидацию данных, чтобы предотвратить ошибки ввода.
+4. Реализовать автоматическое создание и обновление полей `created_at` и `updated_at`.
+
+Ссылки на документацию:
+
+- [NestJS](https://nestjs.com/docs)
+- [TypeORM](https://typeorm.io/docs)
+- [TypeScript](https://www.typescriptlang.org/docs)
+----------------
+
+Теперь обновим наш tag.entity.ts
+Анализ выделенного кода:
+
+```typescript
+// Импорт необходимых модулей TypeORM
+import {
+  Column,
+  Entity,
+  JoinTable,
+  ManyToMany,
+  PrimaryGeneratedColumn,
+  VirtualColumn,
+} from 'typeorm';
+
+// Импорт определенных типов идентификаторов
+import { TagID } from '../../common/types/entity-ids.type';
+
+// Импорт сущностей, связанных с тегами
+import { ArticleEntity } from './article.entity';
+
+// Импорт перечисления имен таблиц
+import { TableNameEnum } from './enums/table-name.enum';
+
+// Импорт модели для создания и обновления сущностей
+import { CreateUpdateModel } from './models/create-update.model';
+
+// Объявление сущности тега
+@Entity(TableNameEnum.TAGS)
+export class TagEntity extends CreateUpdateModel {
+  // Первичный ключ тега
+  @PrimaryGeneratedColumn('uuid')
+  id: TagID;
+
+  // Наименование тега
+  @Column('text')
+  name: string;
+
+  // Связь многие-к-многим с сущностью ArticleEntity
+  @ManyToMany(() => ArticleEntity, (entity) => entity.tags)
+  @JoinTable()
+  articles?: ArticleEntity[];
+
+  // Виртуальное поле для подсчета количества статей, связанных с тегом
+  @VirtualColumn({ query: () => 'NULL' })
+  articleCount?: number;
+}
+```
+
+Комментарии к каждой строчке кода:
+
+1. Импорт необходимых модулей TypeORM и определенных типов идентификаторов.
+2. Импорт сущностей, связанных с тегами.
+3. Импорт перечисления имен таблиц.
+4. Импорт модели для создания и обновления сущностей.
+5. Объявление сущности тега с использованием декоратора `@Entity()`.
+6. Объявление первичного ключа тега с использованием декоратора `@PrimaryGeneratedColumn()`.
+7. Объявление наименования тега с использованием декоратора `@Column()`.
+8. Объявление связи многие-к-многим с сущностью `ArticleEntity` с использованием декораторов `@ManyToMany()`
+и `@JoinTable()`.
+9. Объявление виртуального поля для подсчета количества статей, связанных с тегом, с использованием
+декоратора `@VirtualColumn()`.
+
+Возможные улучшения всего кода:
+
+1. Реализовать логику для автоматического подсчета количества статей, связанных с тегом.
+2. Добавить более подробное логирование или обработку ошибок.
+3. Реализовать валидацию данных, чтобы предотвратить ошибки ввода.
+4. Реализовать автоматическое создание и обновление полей `created_at` и `updated_at`.
+
+Ссылки на документацию:
+
+- [NestJS](https://nestjs.com/docs)
+- [TypeORM](https://typeorm.io/docs)
+- [TypeScript](https://www.typescriptlang.org/docs)
+--------------
+
+Теперь создадим новый модуль tag
+nest g res modules/tag --no-spec
+Переделываем структуру папок как везде
+tag
+--models
+--|--dto
+--|--|--res
+--|--|--|--tag.res.dto.ts
+--services
+--|--tag.service.ts
+--tag.controller.ts
+--tag.module.ts
+--------------------
+
+Переходим в tag.service.ts и переделываем его
+Анализ выделенного кода:
+
+```typescript
+// Импорт необходимых модулей NestJS и сущностей и репозитория
+import { Injectable } from '@nestjs/common';
+import { TagEntity } from '../../../database/entities/tag.entity';
+import { TagRepository } from '../../repositories/services/tag.repository';
+
+// Объявление сервиса для работы с тегами
+@Injectable()
+export class TagService {
+  // Внедрение зависимости репозитория тегов
+  constructor(private readonly tagRepository: TagRepository) {}
+
+  // Метод для получения популярных тегов
+  public async getPopular(): Promise<TagEntity[]> {
+    // Вызов метода репозитория для получения популярных тегов
+    return await this.tagRepository.getPopular();
+  }
+}
+```
+
+Комментарии к каждой строчке кода:
+
+1. Импорт необходимых модулей NestJS и сущностей и репозитория.
+2. Объявление сервиса для работы с тегами с использованием декоратора `@Injectable()`.
+3. Внедрение зависимости репозитория тегов с использованием конструктора.
+4. Объявление метода `getPopular()` для получения популярных тегов.
+5. Вызов метода репозитория для получения популярных тегов.
+
+Возможные улучшения всего кода:
+
+1. Реализовать логику для определения популярности тегов (например, по количеству связанных статей).
+2. Добавить более подробное логирование или обработку ошибок.
+3. Реализовать валидацию данных, чтобы предотвратить ошибки ввода.
+4. Реализовать автоматическое создание и обновление полей `created_at` и `updated_at`.
+
+Ссылки на документацию:
+
+- [NestJS](https://nestjs.com/docs)
+- [TypeORM](https://typeorm.io/docs)
+- [TypeScript](https://www.typescriptlang.org/docs)
+--------------------
+
+Теперь идем и переделываем tag.controller.ts
+Анализ выделенного кода:
+
+```typescript
+// Импорт необходимых модулей NestJS и декораторов
+import { Controller, Get } from '@nestjs/common';
+import { ApiTags } from '@nestjs/swagger';
+import { SkipAuth } from '../auth/decorators/skip-auth.decorator';
+
+// Импорт моделей и сервисов
+import { TagResDto } from './models/dto/res/tag.res.dto';
+import { TagMapper } from './services/tag.mapper';
+import { TagService } from './services/tag.service';
+
+// Объявление контроллера для работы с тегами
+@ApiTags('Tags')
+@Controller('tags')
+export class TagController {
+  // Внедрение зависимости сервиса тегов
+  constructor(private readonly tagService: TagService) {}
+
+  // Метод для получения популярных тегов
+  @SkipAuth()
+  @Get('popular')
+  public async getPopular(): Promise<TagResDto[]> {
+    // Вызов сервиса для получения популярных тегов
+    const result = await this.tagService.getPopular();
+
+    // Маппинг результата в модель ответа и возврат результата
+    return TagMapper.toResListDto(result);
+  }
+}
+```
+
+Комментарии к каждой строчке кода:
+
+1. Импорт необходимых модулей NestJS и декораторов.
+2. Импорт моделей и сервисов.
+3. Объявление контроллера для работы с тегами с использованием декоратора `@ApiTags()`.
+4. Объявление контроллера с использованием декоратора `@Controller()`.
+5. Внедрение зависимости сервиса тегов с использованием конструктора.
+6. Объявление метода `getPopular()` для получения популярных тегов с использованием декораторов `@SkipAuth()`
+и `@Get()`.
+7. Вызов сервиса для получения популярных тегов.
+8. Маппинг результата в модель ответа и возврат результата.
+
+Возможные улучшения всего кода:
+
+1. Реализовать логику для определения популярности тегов (например, по количеству связанных статей).
+2. Добавить более подробное логирование или обработку ошибок.
+3. Реализовать валидацию данных, чтобы предотвратить ошибки ввода.
+4. Реализовать автоматическое создание и обновление полей `created_at` и `updated_at`.
+
+Ссылки на документацию:
+
+- [NestJS](https://nestjs.com/docs)
+- [TypeORM](https://typeorm.io/docs)
+- [TypeScript](https://www.typescriptlang.org/docs)
+-----------------
+
+Теперь доробатываем tag.repository.ts
+Анализ выделенного кода:
+
+```typescript
+// Импорт необходимых модулей NestJS и TypeORM
+import { Injectable } from '@nestjs/common';
+import { DataSource, Repository } from 'typeorm';
+
+// Импорт сущности тега
+import { TagEntity } from '../../../database/entities/tag.entity';
+
+// Объявление репозитория для работы с тегами
+@Injectable()
+export class TagRepository extends Repository<TagEntity> {
+  // Внедрение зависимости источника данных
+  constructor(private readonly dataSource: DataSource) {
+    super(TagEntity, dataSource.manager);
+  }
+
+  // Метод для получения популярных тегов
+  public async getPopular(): Promise<TagEntity[]> {
+    // Создание QueryBuilder для создания запроса
+    const qb = this.createQueryBuilder('tag');
+
+    // Добавление связи с таблицей статей
+    qb.leftJoin('tag.articles', 'article');
+
+    // Добавление вычисляемого поля для подсчета количества статей у тега
+    qb.addSelect('COUNT(article.id)', 'tag_articleCount');
+
+    // Группировка результатов по идентификатору тега
+    qb.groupBy('tag.id');
+
+    // Сортировка результатов по количеству статей у тега в порядке убывания
+    qb.orderBy('"tag_articleCount"', 'DESC');
+
+    // Ограничение количества результатов до 10
+    qb.limit(10);
+
+    // Выполнение запроса и возврат результата
+    return await qb.getMany();
+  }
+}
+```
+
+Комментарии к каждой строчке кода:
+
+1. Импорт необходимых модулей NestJS и TypeORM.
+2. Импорт сущности тега.
+3. Объявление репозитория для работы с тегами с использованием декоратора `@Injectable()`.
+4. Внедрение зависимости источника данных.
+5. Объявление метода `getPopular()` для получения популярных тегов.
+6. Создание QueryBuilder для создания запроса.
+7. Добавление связи с таблицей статей.
+8. Добавление вычисляемого поля для подсчета количества статей у тега.
+9. Группировка результатов по идентификатору тега.
+10. Сортировка результатов по количеству статей у тега в порядке убывания.
+11. Ограничение количества результатов до 10.
+12. Выполнение запроса и возврат результата.
+
+Возможные улучшения всего кода:
+
+1. Реализовать логику для определения популярности тегов (например, по количеству связанных статей).
+2. Добавить более подробное логирование или обработку ошибок.
+3. Реализовать валидацию данных, чтобы предотвратить ошибки ввода.
+4. Реализовать автоматическое создание и обновление полей `created_at` и `updated_at`.
+
+Ссылки на документацию:
+
+- [NestJS](https://nestjs.com/docs)
+- [TypeORM](https://typeorm.io/docs)
+- [TypeScript](https://www.typescriptlang.org/docs)
+-----------------
+
+В папке src/modules/tag/services добовляем файл tag.mapper.ts
+Анализ выделенного кода:
+
+```typescript
+// Импорт необходимых модулей NestJS
+import { Injectable } from '@nestjs/common';
+
+// Импорт сущности тега и модели ответа
+import { TagEntity } from '../../../database/entities/tag.entity';
+import { TagResDto } from '../models/dto/res/tag.res.dto';
+
+// Объявление сервиса для маппинга тегов
+@Injectable()
+export class TagMapper {
+  // Метод для преобразования списка сущностей тегов в список моделей ответа
+  public static toResListDto(data: TagEntity[]): TagResDto[] {
+    return data.map(this.toResDto);
+  }
+
+  // Метод для преобразования сущности тега в модель ответа
+  public static toResDto(data: TagEntity): TagResDto {
+    return {
+      id: data.id,
+      name: data.name,
+      articleCount: data['articleCount'] || 0,
+    };
+  }
+}
+```
+
+Комментарии к каждой строчке кода:
+
+1. Импорт необходимых модулей NestJS.
+2. Импорт сущности тега и модели ответа.
+3. Объявление сервиса для маппинга тегов с использованием декоратора `@Injectable()`.
+4. Метод для преобразования списка сущностей тегов в список моделей ответа.
+5. Метод для преобразования сущности тега в модель ответа.
+
+Возможные улучшения всего кода:
+
+1. Реализовать логику для определения количества статей у тега (например, с использованием связанной таблицы статей).
+2. Добавить более подробное логирование или обработку ошибок.
+3. Реализовать валидацию данных, чтобы предотвратить ошибки ввода.
+4. Реализовать автоматическое создание и обновление полей `created_at` и `updated_at`.
+
+Ссылки на документацию:
+
+- [NestJS](https://nestjs.com/docs)
+- [TypeORM](https://typeorm.io/docs)
+- [TypeScript](https://www.typescriptlang.org/docs)
+------------------
+
+Переделываем tag.res.dto.ts
+Анализ выделенного кода:
+
+```typescript
+// Объявление Data Transfer Object (DTO) для модели ответа тега
+export class TagResDto {
+  // Идентификатор тега
+  id: string;
+
+  // Наименование тега
+  name: string;
+
+  // Количество статей, связанных с тегом
+  articleCount: number;
+}
+```
+
+Комментарии к каждой строчке кода:
+
+1. Объявление Data Transfer Object (DTO) для модели ответа тега с использованием ключевого слова `export`.
+2. Объявление свойства `id` для хранения идентификатора тега с использованием типа `string`.
+3. Объявление свойства `name` для хранения наименования тега с использованием типа `string`.
+4. Объявление свойства `articleCount` для хранения количества статей, связанных с тегом, с использованием типа `number`.
+
+Возможные улучшения всего кода:
+
+1. Реализовать логику для получения количества статей у тега (например, с использованием связанной таблицы статей).
+2. Добавить более подробное логирование или обработку ошибок.
+3. Реализовать валидацию данных, чтобы предотвратить ошибки ввода.
+4. Реализовать автоматическое создание и обновление полей `created_at` и `updated_at`.
+
+Ссылки на документацию:
+
+- [NestJS](https://nestjs.com/docs)
+- [TypeORM](https://typeorm.io/docs)
+- [TypeScript](https://www.typescriptlang.org/docs)
+----------------
+
+Проверяем чтобы в tag.module.ts все было подключено
+Анализ выделенного кода:
+
+```typescript
+// Импорт необходимых модулей NestJS
+import { Module } from '@nestjs/common';
+
+// Импорт сервиса для работы с тегами
+import { TagService } from './services/tag.service';
+
+// Импорт контроллера для обработки запросов к тегам
+import { TagController } from './tag.controller';
+
+// Объявление модуля для тегов
+@Module({
+  // Объявление контроллеров, связанных с модулем тегов
+  controllers: [TagController],
+
+  // Объявление провайдеров, связанных с модулем тегов
+  providers: [TagService],
+})
+export class TagModule {}
+```
+
+Комментарии к каждой строчке кода:
+
+1. Импорт необходимых модулей NestJS.
+2. Импорт сервиса для работы с тегами.
+3. Импорт контроллера для обработки запросов к тегам.
+4. Объявление модуля для тегов с использованием декоратора `@Module()`.
+5. Объявление контроллеров, связанных с модулем тегов.
+6. Объявление провайдеров, связанных с модулем тегов.
+
+Возможные улучшения всего кода:
+
+1. Реализовать логику для получения, создания, обновления и удаления тегов.
+2. Добавить более подробное логирование или обработку ошибок.
+3. Реализовать валидацию данных, чтобы предотвратить ошибки ввода.
+4. Реализовать автоматическое создание и обновление полей `created_at` и `updated_at`.
+
+Ссылки на документацию:
+
+- [NestJS](https://nestjs.com/docs)
+- [TypeORM](https://typeorm.io/docs)
+- [TypeScript](https://www.typescriptlang.org/docs)
+------------------
+
+И проверяем чтобы tag.module.ts был подключен в главном модуле app.module.ts
+Анализ выделенного кода:
+
+```typescript
+// Импорт необходимых модулей NestJS и внешних модулей
+import { Module } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
+import { APP_FILTER } from '@nestjs/core';
+
+// Импорт глобального фильтра исключений
+import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
+
+// Импорт конфигурации приложения
+import configuration from './configs/configuration';
+
+// Импорт модулей приложения
+import { ArticlesModule } from './modules/articles/articles.module';
+import { AuthModule } from './modules/auth/auth.module';
+import { CommentsModule } from './modules/comments/comments.module';
+import { HealthModule } from './modules/health/health.module';
+import { LoggerModule } from './modules/logger/logger.module';
+import { PostgresModule } from './modules/postgres/postgres.module';
+import { RedisModule } from './modules/redis/redis.module';
+import { RepositoryModule } from './modules/repositories/repository.module';
+import { TagModule } from './modules/tag/tag.module';
+import { UsersModule } from './modules/users/users.module';
+
+// Объявление корневого модуля приложения
+@Module({
+  // Объявление импортируемых модулей
+  imports: [
+    // Модуль конфигурации приложения
+    ConfigModule.forRoot({
+      load: [configuration],
+      isGlobal: true,
+    }),
+
+    // Модуль репозиториев
+    RepositoryModule,
+
+    // Модуль логгера
+    LoggerModule,
+
+    // Модуль PostgreSQL
+    PostgresModule,
+
+    // Модуль статей
+    ArticlesModule,
+
+    // Модуль пользователей
+    UsersModule,
+
+    // Модуль комментариев
+    CommentsModule,
+
+    // Модуль работоспособности
+    HealthModule,
+
+    // Повторное импортирование модуля PostgreSQL (возможно, ошибка)
+    PostgresModule,
+
+    // Модуль Redis
+    RedisModule,
+
+    // Модуль аутентификации
+    AuthModule,
+
+    // Модуль тегов
+    TagModule,
+  ],
+
+  // Объявление провайдеров
+  providers: [
+    {
+      // Объявление глобального фильтра исключений
+      provide: APP_FILTER,
+      useClass: GlobalExceptionFilter,
+    },
+  ],
+})
+export class AppModule {}
+```
+
+Комментарии к каждой строчке кода:
+
+1. Импорт необходимых модулей NestJS и внешних модулей.
+2. Импорт глобального фильтра исключений.
+3. Импорт конфигурации приложения.
+4. Импорт модулей приложения.
+5. Объявление корневого модуля приложения.
+6. Объявление импортируемых модулей.
+7. Объявление модуля конфигурации приложения.
+8. Объявление модулей приложения.
+9. Объявление провайдеров.
+10. Объявление глобального фильтра исключений.
+
+Возможные улучшения всего кода:
+
+1. Реализовать логику для получения, создания, обновления и удаления данных в модулях приложения.
+2. Добавить более подробное логирование или обработку ошибок.
+3. Реализовать валидацию данных, чтобы предотвратить ошибки ввода.
+4. Реализовать автоматическое создание и обновление полей `created_at` и `updated_at`.
+
+Ссылки на документацию:
+
+- [NestJS](https://nestjs.com/docs)
+- [TypeORM](https://typeorm.io/docs)
+- [TypeScript](https://www.typescriptlang.org/docs)

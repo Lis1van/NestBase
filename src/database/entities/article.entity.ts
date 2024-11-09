@@ -33,15 +33,17 @@ export class ArticleEntity extends CreateUpdateModel {
   @OneToMany(() => LikeEntity, (entity) => entity.article)
   likes?: LikeEntity[];
 
+  @OneToMany(() => CommentEntity, (entity) => entity.article)
+  comments?: CommentEntity[];
+
   @Column()
   user_id: UserID;
-  @ManyToOne(() => UserEntity, (entity) => entity.articles)
+  @ManyToOne(() => UserEntity, (entity) => entity.articles, {
+    onDelete: 'CASCADE',
+  })
   @JoinColumn({ name: 'user_id' })
   user?: UserEntity;
 
   @ManyToMany(() => TagEntity, (entity) => entity.articles)
   tags?: TagEntity[];
-
-  @OneToMany(() => CommentEntity, (entity) => entity.articles)
-  comment?: CommentEntity[];
 }

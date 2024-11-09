@@ -23,8 +23,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
 
     if (exception instanceof BadRequestException) {
       status = exception.getStatus();
-      messages = (exception as unknown as BadRequestExceptionResponse).response
-        .message;
+      messages = (exception as any).response.message;
     } else if (exception instanceof HttpException) {
       status = exception.getStatus();
       messages = exception.message;
@@ -40,6 +39,6 @@ export class GlobalExceptionFilter implements ExceptionFilter {
       messages: Array.isArray(messages) ? messages : [messages],
       timestamp: new Date().toISOString(),
       path: request.url,
-    } as ErrorResponse);
+    });
   }
 }

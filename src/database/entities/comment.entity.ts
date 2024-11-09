@@ -32,7 +32,7 @@ export class CommentEntity extends CreateUpdateModel {
 
   @Column()
   article_id: ArticleID;
-  @ManyToOne(() => ArticleEntity, (entity) => entity.comment)
+  @ManyToOne(() => ArticleEntity, (entity) => entity.comments)
   @JoinColumn({ name: 'article_id' })
-  articles?: ArticleEntity;
+  article?: ArticleEntity;
 }
