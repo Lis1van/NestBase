@@ -8,6 +8,7 @@
 // import { ArticleRepository } from '../../repositories/services/article.repository';
 // import { TagRepository } from '../../repositories/services/tag.repository';
 // import { CreateArticleDto } from '../models/dto/req/create-article.dto';
+// import { ListArticleQueryDto } from '../models/dto/req/list-article-query.dto';
 // import { UpdateArticleDto } from '../models/dto/req/update-article.dto';
 //
 // @Injectable()
@@ -26,6 +27,13 @@
 //     return await this.articleRepository.save(
 //       this.articleRepository.create({ ...dto, tags, user_id: userData.userId }),
 //     );
+//   }
+//
+//   public async findAll(
+//     userData: IUserData,
+//     query: ListArticleQueryDto,
+//   ): Promise<[ArticleEntity[], number]> {
+//     return await this.articleRepository.findAll(userData, query);
 //   }
 //
 //   public async findOne(articleId: ArticleID): Promise<ArticleEntity> {
@@ -91,8 +99,11 @@ export class ArticlesService {
     return await this.articleRepository.findAll(userData, query);
   }
 
-  public async findOne(articleId: ArticleID): Promise<ArticleEntity> {
-    return {} as any;
+  public async findOne(
+    userData: IUserData,
+    articleId: ArticleID,
+  ): Promise<ArticleEntity> {
+    return await this.articleRepository.getById(userData, articleId);
   }
 
   public async update(

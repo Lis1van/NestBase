@@ -1,0 +1,1261 @@
+Как вы могли уже понять, в модуле, который мы пишем, будет загружаться фотография.
+У нас есть специальный пайп для валидации файлов (например, мы можем установить лимиты, валидаторы и прочее).
+Однако мы этого делать не будем. Мы просто перехватим файл и сохраним его в нашем контейнере.
+Чтобы подключить работу с базой данных и файлами, необходимо будет установить дополнительные зависимости.
+
+npm i @aws-sdk/client-s3
+npm i multer
+npm i -D @types/multer
+
+Далее, сервис будет выглядеть так же, как и раньше. Мы добавим типы, необходимые для работы,
+и используем файл-интерцептор. Мы подключим этот интерцептор через декоратор `@UseInterceptors` и
+укажем `FileInterceptor`. Мы создадим метод для загрузки файла пользователя с использованием метода POST,
+в котором будет находиться идентификатор пользователя. Например, для загрузки аватара мы добавим интерцептор
+с ключом файла и будем использовать параметр `@Body`, чтобы принять пользовательские данные и файл.
+
+Доработаем наш users.controller.ts
+## Анализ кода UsersController
+
+### 1. Исходный код с комментариями
+```typescript
+import {
+  Body, // Декоратор для извлечения данных тела запроса
+  Controller, // Декоратор для объявления контроллера
+  Delete, // Декоратор для метода HTTP DELETE
+  Get, // Декоратор для метода HTTP GET
+  Param, // Декоратор для извлечения параметров из запроса
+  ParseUUIDPipe, // Pipe для валидации и преобразования параметров UUID
+  Patch, // Декоратор для метода HTTP PATCH
+  Post, // Декоратор для метода HTTP POST
+  UploadedFile, // Декоратор для извлечения загруженного файла
+  UseInterceptors, // Декоратор для применения интерцепторов
+} from '@nestjs/common'; // Основные декораторы и классы NestJS
+
+import { FileInterceptor } from '@nestjs/platform-express'; // Интерцептор для обработки загружаемых файлов
+import { ApiBearerAuth, ApiConsumes, ApiTags } from '@nestjs/swagger'; // Декораторы Swagger для документации
+
+import { ApiFile } from '../../common/decorators/api-file.decorator'; // Кастомный декоратор для описания
+загружаемого файла
+import { UserID } from '../../common/types/entity-ids.type'; // Типизация для ID пользователя
+import { CurrentUser } from '../auth/decorators/current-user.decorator'; // Декоратор для извлечения текущего
+пользователя
+import { SkipAuth } from '../auth/decorators/skip-auth.decorator'; // Декоратор для пропуска авторизации
+import { IUserData } from '../auth/models/interfaces/user-data.interface'; // Интерфейс для данных пользователя
+import { UpdateUserReqDto } from './models/dto/req/update-user.req.dto'; // DTO для обновления пользователя
+import { UserBaseResDto } from './models/dto/res/user-base.res.dto'; // DTO для ответа с базовой информацией
+о пользователе
+import { UserMapper } from './services/user.mapper'; // Маппер для преобразования данных
+import { UsersService } from './services/users.service'; // Сервис для работы с пользователями
+
+@ApiTags('Users') // Группировка контроллера в документации Swagger под тегом 'Users'
+@Controller('users') // Указывает, что данный класс является контроллером с базовым маршрутом 'users'
+export class UsersController {
+  constructor(private readonly usersService: UsersService) {} // Внедрение UsersService для взаимодействия
+  с данными пользователей
+
+  @ApiBearerAuth() // Указывает, что метод требует авторизацию через Bearer-токен
+  @Get('me') // Определение маршрута GET /users/me
+  public async findMe(@CurrentUser() userData: IUserData) { // Извлечение данных текущего пользователя
+    const result = await this.usersService.findMe(userData); // Вызов сервиса для получения информации о
+    текущем пользователе
+    return UserMapper.toResDto(result); // Преобразование результата с помощью маппера
+  }
+
+  @ApiBearerAuth()
+  @Patch('me') // Определение маршрута PATCH /users/me
+  public async updateMe(
+    @CurrentUser() userData: IUserData,
+    @Body() updateUserDto: UpdateUserReqDto, // DTO для обновления данных пользователя
+  ) {
+    const result = await this.usersService.updateMe(userData, updateUserDto); // Обновление данных пользователя
+    в сервисе
+    return UserMapper.toResDto(result); // Преобразование результата
+  }
+
+  @ApiBearerAuth()
+  @Delete('me') // Определение маршрута DELETE /users/me
+  public async removeMe(@CurrentUser() userData: IUserData): Promise<void> {
+    await this.usersService.removeMe(userData); // Удаление текущего пользователя через сервис
+  }
+
+  @ApiBearerAuth()
+  @ApiConsumes('multipart/form-data') // Указывает, что метод потребляет данные в формате multipart/form-data
+  @UseInterceptors(FileInterceptor('avatar')) // Применение интерцептора для обработки загружаемого файла
+  @ApiFile('avatar', false, true) // Кастомная аннотация для описания загружаемого файла
+  @Post('me/avatar') // Определение маршрута POST /users/me/avatar
+  public async uploadAvatar(
+    @CurrentUser() userData: IUserData,
+    @UploadedFile() file: Express.Multer.File, // Извлечение загружаемого файла
+  ): Promise<void> {
+    await this.usersService.uploadAvatar(userData, file); // Загрузка аватара через сервис
+  }
+
+  @ApiBearerAuth()
+  @Delete('me/avatar') // Определение маршрута DELETE /users/me/avatar
+  public async deleteAvatar(@CurrentUser() userData: IUserData): Promise<void> {
+    await this.usersService.deleteAvatar(userData); // Удаление аватара через сервис
+  }
+
+  @SkipAuth() // Пропуск авторизации для данного маршрута
+  @Get(':userId') // Определение маршрута GET /users/:userId
+  public async findOne(
+    @Param('userId', ParseUUIDPipe) userId: UserID, // Проверка параметра userId на соответствие UUID
+  ): Promise<UserBaseResDto> {
+    const result = await this.usersService.findOne(userId); // Получение информации о пользователе через сервис
+    return UserMapper.toResDto(result); // Преобразование результата
+  }
+
+  @ApiBearerAuth()
+  @Post(':userId/follow') // Определение маршрута POST /users/:userId/follow
+  public async follow(
+    @Param('userId', ParseUUIDPipe) userId: UserID,
+    @CurrentUser() userData: IUserData, // Извлечение текущего пользователя
+  ): Promise<void> {
+    await this.usersService.follow(userData, userId); // Подписка на пользователя через сервис
+  }
+
+  @ApiBearerAuth()
+  @Delete(':userId/follow') // Определение маршрута DELETE /users/:userId/follow
+  public async unfollow(
+    @Param('userId', ParseUUIDPipe) userId: UserID,
+    @CurrentUser() userData: IUserData, // Извлечение текущего пользователя
+  ): Promise<void> {
+    await this.usersService.unfollow(userData, userId); // Отписка от пользователя через сервис
+  }
+}
+```
+
+### 2. Детальный разбор
+Каждая строка/блок кода проанализирован в разделе выше с комментариями, поясняющими назначение и связь с
+экосистемой NestJS.
+
+### 3. Возможности расширения
+- **Добавление валидации**: В DTO можно интегрировать валидаторы для проверки входных данных (`class-validator`).
+- **Логирование**: Интеграция логирования для отслеживания действий (например, с использованием `LoggerService`).
+- **Мидлвары и Гуарды**: Можно добавить Guards для более сложных сценариев проверки прав доступа.
+
+### 4. Рекомендации по улучшению
+- **Безопасность**: Добавить защиту от уязвимостей загрузки файлов, например, проверку типа файла.
+- **Производительность**: Кэширование результатов запросов при использовании метода `findOne`.
+- **Читаемость**: Разделить методы с большим количеством логики на сервисные методы.
+
+### 5. Примеры использования
+- **Базовое использование**: Пользователь выполняет запрос на обновление данных через метод `updateMe`.
+- **Обработка ошибок**: Внедрение глобальных фильтров исключений для обработки ошибок (например, `HttpExceptionFilter`).
+- **Тестирование**: Написание e2e-тестов с использованием `@nestjs/testing` для обеспечения корректной
+работы контроллера.
+-----------------------
+
+Теперь доработаем users.service.ts
+## Анализ кода UsersService
+
+### 1. Исходный код с комментариями
+```typescript
+import { ConflictException, Injectable } from '@nestjs/common'; // Импорты NestJS для работы с исключениями
+и обозначения класса как инъекционного сервиса.
+
+import { UserID } from '../../../common/types/entity-ids.type'; // Типизация для идентификатора пользователя.
+import { UserEntity } from '../../../database/entities/user.entity'; // Импорт сущности пользователя.
+import { IUserData } from '../../auth/models/interfaces/user-data.interface'; // Интерфейс для данных пользователя.
+import { ContentType } from '../../file-storage/enums/content-type.enum'; // Перечисление типов контента для
+хранения файлов.
+import { FileStorageService } from '../../file-storage/services/file-storage.service'; // Сервис для работы с
+файловым хранилищем.
+import { FollowRepository } from '../../repositories/services/follow.repository'; // Репозиторий для работы с подписками.
+import { RefreshTokenRepository } from '../../repositories/services/refresh-token.repository'; // Репозиторий
+для работы с токенами обновления.
+import { UserRepository } from '../../repositories/services/user.repository'; // Репозиторий для работы с пользователями.
+import { UpdateUserReqDto } from '../models/dto/req/update-user.req.dto'; // DTO для обновления данных пользователя.
+
+@Injectable() // Декоратор, который делает класс доступным для DI контейнера NestJS.
+export class UsersService {
+  constructor(
+    private readonly fileStorageService: FileStorageService, // Внедрение сервиса для работы с файлами.
+    private readonly userRepository: UserRepository, // Внедрение репозитория пользователей.
+    private readonly followRepository: FollowRepository, // Внедрение репозитория подписок.
+    private readonly refreshTokenRepository: RefreshTokenRepository, // Внедрение репозитория токенов обновления.
+  ) {}
+
+  public async findMe(userData: IUserData): Promise<UserEntity> {
+    return await this.userRepository.findOneBy({ id: userData.userId }); // Возвращает сущность пользователя
+    по ID из интерфейса данных пользователя.
+  }
+
+  public async updateMe(
+    userData: IUserData,
+    dto: UpdateUserReqDto,
+  ): Promise<UserEntity> {
+    const user = await this.userRepository.findOneBy({ id: userData.userId }); // Получает пользователя из базы данных.
+    this.userRepository.merge(user, dto); // Объединяет данные DTO с существующим пользователем.
+    return await this.userRepository.save(user); // Сохраняет обновленные данные в базе данных.
+  }
+
+  public async removeMe(userData: IUserData): Promise<void> {
+    await this.userRepository.update(
+      { id: userData.userId },
+      { deleted: new Date() }, // Обновляет поле "deleted" для пометки пользователя как удаленного.
+    );
+    await this.refreshTokenRepository.delete({ user_id: userData.userId }); // Удаляет токены обновления,
+    связанные с пользователем.
+  }
+
+  public async uploadAvatar(
+    userData: IUserData,
+    file: Express.Multer.File,
+  ): Promise<void> {
+    const user = await this.userRepository.findOneBy({ id: userData.userId }); // Получает пользователя из базы данных.
+    const pathToFile = await this.fileStorageService.uploadFile(
+      file,
+      ContentType.IMAGE,
+      userData.userId,
+    ); // Загружает файл и возвращает путь к нему.
+    if (user.image) {
+      await this.fileStorageService.deleteFile(user.image); // Удаляет старый файл аватара, если он существует.
+    }
+    await this.userRepository.save({ ...user, image: pathToFile }); // Сохраняет новый путь к аватару.
+  }
+
+  public async deleteAvatar(userData: IUserData): Promise<void> {
+    const user = await this.userRepository.findOneBy({ id: userData.userId }); // Получает пользователя.
+    if (user.image) {
+      await this.fileStorageService.deleteFile(user.image); // Удаляет файл аватара.
+      await this.userRepository.save({ ...user, image: null }); // Обновляет поле изображения.
+    }
+  }
+
+  public async findOne(userId: UserID): Promise<UserEntity> {
+    return await this.userRepository.findOneBy({ id: userId }); // Возвращает сущность пользователя по ID.
+  }
+
+  public async follow(userData: IUserData, userId: UserID): Promise<void> {
+    if (userData.userId === userId) {
+      throw new ConflictException('You cannot follow yourself'); // Исключение при попытке подписаться на самого себя.
+    }
+    await this.isUserExistOrThrow(userId); // Проверяет существование пользователя.
+    const follow = await this.followRepository.findOneBy({
+      follower_id: userData.userId,
+      following_id: userId,
+    });
+    if (follow) {
+      throw new ConflictException('You already follow this user'); // Исключение, если подписка уже существует.
+    }
+    await this.followRepository.save(
+      this.followRepository.create({
+        follower_id: userData.userId,
+        following_id: userId,
+      }), // Сохраняет новую подписку.
+    );
+  }
+
+  public async unfollow(userData: IUserData, userId: UserID): Promise<void> {
+    if (userData.userId === userId) {
+      throw new ConflictException('You cannot unfollow yourself'); // Исключение при попытке отписаться от самого себя.
+    }
+    await this.isUserExistOrThrow(userId); // Проверяет существование пользователя.
+    const follow = await this.followRepository.findOneBy({
+      follower_id: userData.userId,
+      following_id: userId,
+    });
+    if (!follow) {
+      throw new ConflictException('You do not follow this user'); // Исключение, если подписка не существует.
+    }
+    await this.followRepository.delete({
+      follower_id: userData.userId,
+      following_id: userId,
+    }); // Удаляет подписку.
+  }
+
+  private async isUserExistOrThrow(userId: UserID): Promise<void> {
+    const user = await this.userRepository.findOneBy({ id: userId }); // Проверка существования пользователя.
+    if (!user) {
+      throw new ConflictException('User not found'); // Исключение, если пользователь не найден.
+    }
+  }
+}
+```
+
+### 2. Детальный разбор (продолжение)
+
+#### Методы и их технические детали
+
+##### Метод `findMe`
+**Описание:** Метод возвращает сущность текущего пользователя по его ID, который содержится в объекте `userData`.
+
+**Как работает:**
+- Использует метод `findOneBy` из `UserRepository` для поиска пользователя в базе данных.
+- Обрабатывает запрос асинхронно с использованием `await` для ожидания завершения запроса.
+
+**Связь с NestJS:**
+- Метод является частью сервисного слоя, который отвечает за бизнес-логику.
+- Подключение к базе данных происходит через репозитории, что соответствует паттерну `Repository Pattern`,
+поддерживаемому TypeORM.
+
+**Документация:**
+- [TypeORM Repository](https://typeorm.io/repository-api)
+- [NestJS Asynchronous Providers](https://docs.nestjs.com/fundamentals/async-providers)
+
+##### Метод `updateMe`
+**Описание:** Обновляет данные текущего пользователя на основе данных, переданных через `dto`.
+
+**Технические детали:**
+- Ищет пользователя по ID и объединяет новые данные с существующими с помощью метода `merge`.
+- Сохраняет изменения через `save`, что обновляет запись в базе данных.
+
+**Потенциальные улучшения:**
+- Добавление логирования обновленных данных.
+- Валидация данных с использованием `class-validator` перед обновлением.
+
+##### Метод `removeMe`
+**Описание:** Логически удаляет пользователя, устанавливая метку времени в поле `deleted`, и очищает связанные
+с ним токены обновления.
+
+**Технические детали:**
+- Метод `update` обновляет поле `deleted` пользователя.
+- Метод `delete` в `RefreshTokenRepository` удаляет все связанные токены по ID пользователя.
+
+**Возможные расширения:**
+- Добавление мягкого удаления (soft delete) с возможностью восстановления.
+
+##### Метод `uploadAvatar`
+**Описание:** Загружает новый аватар пользователя и удаляет старый, если он существует.
+
+**Технические детали:**
+- Использует метод `uploadFile` из `FileStorageService` для загрузки файла.
+- Проверяет наличие старого аватара и удаляет его через `deleteFile`.
+- Обновляет ссылку на новый аватар в базе данных.
+
+**Рекомендации по улучшению:**
+- Ограничение типов файлов и их размера на уровне загрузки.
+- Обработка ошибок при удалении файла.
+
+##### Метод `deleteAvatar`
+**Описание:** Удаляет текущий аватар пользователя и обновляет запись в базе данных.
+
+**Возможные улучшения:**
+- Добавить логирование событий удаления.
+- Проверить наличие аватара перед выполнением операции и вернуть сообщение, если его нет.
+
+##### Метод `follow`
+**Описание:** Добавляет запись о подписке текущего пользователя на другого.
+
+**Технические детали:**
+- Проверяет, чтобы пользователь не подписывался сам на себя.
+- Проверяет существование пользователя перед подпиской.
+- Использует метод `create` и `save` для добавления новой записи в `FollowRepository`.
+
+**Рекомендации:**
+- Можно добавить события/уведомления о новых подписках.
+
+##### Метод `unfollow`
+**Описание:** Удаляет запись о подписке текущего пользователя на другого.
+
+**Технические детали:**
+- Проверяет существование подписки перед удалением.
+- Использует метод `delete` для удаления записи из базы данных.
+
+**Оптимизация:**
+- Можно использовать транзакции для обеспечения целостности данных при сложных сценариях с несколькими действиями.
+
+##### Метод `isUserExistOrThrow`
+**Описание:** Проверяет существование пользователя по ID и выбрасывает исключение, если пользователь не найден.
+
+**Технические детали:**
+- Вызывает `findOneBy` для проверки наличия пользователя.
+- Выбрасывает `ConflictException`, если пользователь отсутствует.
+
+**Возможности расширения:**
+- Добавление типов ошибок для лучшего контроля ошибок.
+
+### 3. Возможности расширения
+
+#### Расширение методов
+- **Логирование:** Использовать встроенные возможности NestJS `Logger` для отслеживания вызовов методов.
+- **Проверка прав доступа:** Интегрировать Guard'ы для проверки ролей пользователя перед выполнением операций.
+- **Расширенные DTO:** Добавить дополнительные поля и валидацию в DTO для расширения функциональности методов.
+
+#### Добавление новых функций
+- **Система уведомлений:** Уведомлять пользователей о новых подписках или изменениях профиля.
+- **Очереди для длительных операций:** Интегрировать `Bull` или `BullMQ` для управления фоновой обработкой
+загрузок файлов или уведомлений.
+
+### 4. Рекомендации по улучшению
+
+#### Читаемость и поддержка кода
+- Разделить большие методы на меньшие функции для повышения читаемости и тестируемости.
+- Использовать декларативный подход в методах с большим количеством логики.
+
+#### Производительность
+- **Оптимизация запросов:** Использовать `select` для выборки только необходимых полей.
+- **Кэширование:** Интегрировать кэширование (например, Redis) для частых операций, таких как поиск пользователей.
+
+#### Безопасность
+- **Защита данных:** Убедиться, что загружаемые файлы проверяются на наличие вредоносного контента.
+- **Guard'ы:** Проверка прав доступа с использованием Guard'ов для методов, связанных с управлением профилем.
+
+#### Масштабируемость
+- **Сервисная архитектура:** Разделить UsersService на более узконаправленные сервисы для увеличения масштабируемости.
+- **Микросервисы:** Перевести логику загрузки файлов и подписок на отдельные микросервисы.
+
+#### Тестируемость
+- **Юнит-тесты:** Написать тесты с использованием `jest` для всех методов.
+- **Интеграционные тесты:** Проверить взаимодействие с базой данных и сторонними сервисами.
+
+### 5. Примеры использования
+
+#### Базовое использование
+```typescript
+// Получение данных текущего пользователя
+const user = await usersService.findMe(currentUserData);
+```
+
+#### Расширенные сценарии
+- **Добавление новых подписок с проверкой условий.**
+```typescript
+try {
+  await usersService.follow(currentUserData, targetUserId);
+} catch (error) {
+  console.error('Ошибка при подписке:', error.message);
+}
+```
+
+#### Обработка ошибок
+- Добавление централизованной обработки исключений для вывода понятных сообщений клиенту.
+
+#### Тестирование
+- Юнит-тест для метода `findMe`:
+```typescript
+describe('UsersService', () => {
+  let usersService: UsersService;
+
+  beforeEach(() => {
+    usersService = new UsersService(mockFileStorageService, mockUserRepository, mockFollowRepository, mockRefreshTokenRepository);
+  });
+
+  it('should return user entity when findMe is called', async () => {
+    const userData = { userId: '123' };
+    jest.spyOn(mockUserRepository, 'findOneBy').mockResolvedValue(mockUserEntity);
+
+    const result = await usersService.findMe(userData);
+
+    expect(result).toEqual(mockUserEntity);
+    expect(mockUserRepository.findOneBy).toHaveBeenCalledWith({ id: userData.userId });
+  });
+});
+```
+
+### Заключение
+Данный сервис предоставляет надежный и функциональный интерфейс для работы с профилями пользователей,
+управлением подписками и обработкой файлов. Улучшения в плане тестирования, безопасности и производительности
+могут повысить качество кода и обеспечить лучшую поддержку проекта.
+-------------------
+
+При необходимости добавить новый ключ для файла или обновить параметры, мы сделаем соответствующие изменения в коде.
+Далее, чтобы Swagger корректно отобразил загрузку файла, нужно описать схему файла и его тип, так как Swagger
+по умолчанию этого не делает.
+
+Для этого в папке src/modules/users/models/dto/req создадим файл upload-avatar.req.dto.ts
+import { ApiProperty } from '@nestjs/swagger';
+
+export class UploadAvatarReqDto {
+  @ApiProperty({ type: 'string', format: 'binary' })
+  avatar: any;
+}
+Но это мы не будем использовать
+Вместо этого в папке src/common/decorators создадим файл api-file.decorator.ts
+## Анализ кода `ApiFile`
+
+### 1. Исходный код с комментариями
+```typescript
+import { applyDecorators } from '@nestjs/common'; // Импорт функции для применения нескольких декораторов.
+import { ApiBody } from '@nestjs/swagger'; // Импорт декоратора для документации тела запроса.
+
+export const ApiFile = ( // Объявление кастомного декоратора `ApiFile`.
+  fileName: string, // Имя поля для загружаемого файла.
+  isArray = true, // Параметр, указывающий, является ли поле массивом файлов.
+  isRequired = true, // Параметр, указывающий, обязательное ли поле.
+): MethodDecorator => {
+  return applyDecorators( // Возврат функции, которая применяет декораторы к методу.
+    ApiBody({ // Декоратор `ApiBody` для описания тела запроса в документации Swagger.
+      schema: { // Определение схемы тела запроса.
+        type: 'object', // Тело запроса представлено как объект.
+        required: isRequired ? [fileName] : [], // Список обязательных полей.
+        properties: { // Описание полей объекта.
+          [fileName]: isArray // Проверка, является ли поле массивом.
+            ? {
+                type: 'array', // Тип поля — массив.
+                items: { // Описание элементов массива.
+                  type: 'string', // Тип элементов — строка.
+                  format: 'binary', // Формат данных — бинарный (файл).
+                },
+              }
+            : {
+                type: 'string', // Тип поля — строка.
+                format: 'binary', // Формат данных — бинарный (файл).
+              },
+        },
+      },
+    }),
+  );
+};
+```
+
+### 2. Детальный разбор
+
+#### Общий обзор кода
+**Назначение:** Кастомный декоратор `ApiFile` для создания документации Swagger для методов, принимающих файлы.
+Позволяет упростить создание документации для методов, которые обрабатывают загрузку одного или нескольких файлов.
+
+**Место в архитектуре проекта:** Используется в контроллерах для описания API-эндпоинтов, которые принимают
+файлы через `multipart/form-data`.
+
+**Взаимодействие с другими частями:** Работает с контроллерами NestJS и интегрируется с модулем Swagger для
+автоматического создания документации.
+
+#### Построчный анализ
+1. `import { applyDecorators } from '@nestjs/common';`
+   - **Что делает:** Импортирует функцию `applyDecorators` для применения одного или нескольких декораторов к методу.
+   - **Технический уровень:** `applyDecorators` является функцией в NestJS, которая позволяет объединять несколько
+   декораторов в один.
+   - **Связь с NestJS:** Часть ядра NestJS, используется для улучшения читаемости и упрощения кода.
+   - **[Документация по декораторам](https://docs.nestjs.com/custom-decorators)**
+
+2. `import { ApiBody } from '@nestjs/swagger';`
+   - **Что делает:** Импортирует декоратор `ApiBody` для создания описания тела запроса.
+   - **Технический уровень:** `ApiBody` — это часть пакета `@nestjs/swagger`, который используется для генерации
+   документации OpenAPI.
+   - **Связь с NestJS:** Интегрируется с `@nestjs/swagger`, который подключается к приложениям NestJS для
+   автоматической генерации спецификаций OpenAPI.
+   - **[Документация по Swagger в NestJS](https://docs.nestjs.com/openapi/introduction)**
+
+3. `export const ApiFile = (fileName: string, isArray = true, isRequired = true): MethodDecorator => {`
+   - **Что делает:** Объявляет функцию `ApiFile`, которая возвращает декоратор метода.
+   - **Технический уровень:** `MethodDecorator` — это тип функции, которая может быть применена к методу в качестве
+   декоратора.
+
+4. `return applyDecorators(`:
+   - **Что делает:** Возвращает результат применения декораторов с помощью функции `applyDecorators`.
+   - **Технический уровень:** Консолидирует несколько декораторов в один, упрощая их применение к методам.
+
+5. `ApiBody({ schema: { ... } })`:
+   - **Что делает:** Создает документацию для тела запроса с заданной схемой.
+   - **Технический уровень:** `ApiBody` принимает объект конфигурации, описывающий структуру тела запроса.
+
+6. `schema: { type: 'object', required: isRequired ? [fileName] : [], properties: { [fileName]: ... } }`:
+   - **Что делает:** Описывает схему запроса, включая обязательность и типы полей.
+   - **Технический уровень:** Используется схема OpenAPI для описания структуры данных в теле запроса.
+   - **[Документация по API Body](https://swagger.io/specification/#request-body-object)**
+
+7. `properties: { [fileName]: isArray ? { type: 'array', items: { type: 'string', format: 'binary' } } : { type: 'string', format: 'binary' } }`:
+   - **Что делает:** Описывает свойство, представляющее загружаемый файл или массив файлов.
+   - **Технический уровень:** `format: 'binary'` указывает, что данные имеют бинарный формат, используемый для файлов.
+
+### 3. Возможности расширения
+- **Поддержка других типов данных:** Можно добавить параметры для поддержки других форматов (например, `base64`).
+- **Дополнительные свойства:** Добавить возможность указывать максимальный размер файла или допустимые расширения.
+- **Примеры:**
+  ```typescript
+  ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        file: {
+          type: 'string',
+          format: 'binary',
+          maxLength: 5242880, // Ограничение размера файла (5 MB)
+        },
+      },
+    },
+  });
+  ```
+
+### 4. Рекомендации по улучшению
+- **Читаемость:** Разделить логику на функции для обработки параметров `isArray` и `isRequired`.
+- **Тестируемость:** Написать юнит-тесты для проверки корректности генерации схемы.
+- **Масштабируемость:** Добавить возможность передачи дополнительных параметров (например, описание поля).
+- **Пример улучшения:**
+  ```typescript
+  export const ApiFile = (
+    fileName: string,
+    options: { isArray?: boolean; isRequired?: boolean; description?: string } = {},
+  ): MethodDecorator => {
+    const { isArray = true, isRequired = true, description = '' } = options;
+    return applyDecorators(
+      ApiBody({
+        schema: {
+          type: 'object',
+          required: isRequired ? [fileName] : [],
+          properties: {
+            [fileName]: {
+              type: isArray ? 'array' : 'string',
+              items: isArray ? { type: 'string', format: 'binary' } : undefined,
+              format: isArray ? undefined : 'binary',
+              description,
+            },
+          },
+        },
+      }),
+    );
+  };
+  ```
+
+### 5. Примеры использования
+#### Базовое использование
+```typescript
+@ApiFile('profilePicture', true, true)
+uploadProfilePicture(@UploadedFiles() files: Express.Multer.File[]) {
+  // Обработка файлов
+}
+```
+
+#### Расширенные сценарии
+```typescript
+@ApiFile('document', { isArray: false, isRequired: false, description: 'User document file' })
+uploadDocument(@UploadedFile() file: Express.Multer.File) {
+  // Обработка документа
+}
+```
+
+#### Обработка ошибок
+- Проверить наличие файла перед выполнением действий.
+```typescript
+if (!file) {
+  throw new BadRequestException('File is required');
+}
+```
+
+#### Тестирование
+```typescript
+describe('ApiFile Decorator', () => {
+  it('should generate correct schema for a single file', () => {
+    const schema = ApiFile('avatar', false);
+    expect(schema).toBeDefined();
+    // Дополнительные проверки схемы
+  });
+});
+```
+
+**Резюме:** Декоратор `ApiFile` помогает упростить создание документации для методов, обрабатывающих загрузку файлов.
+Улучшения включают добавление параметров, тестирование и расширение функциональности для повышения масштабируемости
+и удобства использования.
+-------------------
+
+Для хранения файлов мы создадим отдельный модуль, который будет содержать сервисы для взаимодействия с хранилищем и
+работы с файлами. Этот модуль будет включать в себя только сервисы и необходимую логику без контроллеров и моделей.
+Для интеграции с хранилищем S3 мы настроим конфигурацию, укажем необходимые ключи и параметры подключения,
+и используем их в нашем сервисе.
+
+Теперь в наш файл .env добавим это
+AWS_S3_REGION="us-west-2"
+AWS_S3_ACCESS_KEY="user"
+AWS_S3_SECRET_KEY="password"
+AWS_S3_BUCKET_NAME="nest-base"
+AWS_S3_ACL="public-read"
+AWS_S3_ENDPOINT="https:localhost:8000/nest-base"
+
+Далее обновляем файл configuration.ts
+import { ConfigType } from './config.type';
+
+export default (): ConfigType => ({
+  app: {
+    port: parseInt(process.env.APP_PORT, 10) || 3003,
+    host: process.env.APP_HOST,
+  },
+  postgres: {
+    host: process.env.POSTGRES_HOST,
+    port: parseInt(process.env.POSTGRES_PORT, 10) || 5432,
+    username: process.env.POSTGRES_USER,
+    password: process.env.POSTGRES_PASSWORD,
+    database: process.env.POSTGRES_DB,
+  },
+  redis: {
+    host: process.env.REDIS_HOST,
+    port: parseInt(process.env.REDIS_PORT, 10) || 6379,
+    password: process.env.REDIS_PASSWORD,
+  },
+ aws: {
+    accessKey: process.env.AWS_S3_ACCESS_KEY,
+    secretKey: process.env.AWS_S3_SECRET_KEY,
+    region: process.env.AWS_S3_REGION,
+    bucketName: process.env.AWS_S3_BUCKET_NAME,
+    acl: process.env.AWS_S3_ACL,
+    endpoint: process.env.AWS_S3_ENDPOINT,
+  },
+  sentry: {
+    dsn: process.env.SENTRY_DSN,
+    env: process.env.SENTRY_ENV,
+    debug: process.env.SENTRY_DEBUG === 'true',
+  },
+  jwt: {
+    accessSecret: process.env.JWT_ACCESS_SECRET,
+    accessExpiresIn: parseInt(process.env.JWT_ACCESS_EXPIRES_IN, 10) || 3600,
+    refreshSecret: process.env.JWT_REFRESH_SECRET,
+    refreshExpiresIn: parseInt(process.env.JWT_REFRESH_EXPIRES_IN, 10) || 86400,
+  },
+});
+
+А теперь и файл config.type.ts
+export type ConfigType = {
+  app: AppConfig;
+  postgres: PostgresConfig;
+  redis: RedisConfig;
+  aws: AwsConfig;
+  sentry: SentryConfig;
+  jwt: JwtConfig;
+};
+
+export type AppConfig = {
+  port: number;
+  host: string;
+};
+
+export type PostgresConfig = {
+  host: string;
+  port: number;
+  username: string;
+  password: string;
+  database: string;
+};
+
+export type RedisConfig = {
+  host: string;
+  port: number;
+  password: string;
+};
+
+export type AwsConfig = {
+  accessKey: string;
+  secretKey: string;
+  region: string;
+  bucketName: string;
+  acl: string;
+  endpoint: string;
+};
+
+export type SentryConfig = {
+  dsn: string;
+  env: string;
+  debug: boolean;
+};
+
+export type JwtConfig = {
+  accessSecret: string;
+  accessExpiresIn: number;
+  refreshSecret: string;
+  refreshExpiresIn: number;
+};
+
+Далее создадим папку src/modules/file-storage с файлом file-storage.module.ts
+import { Module } from '@nestjs/common';
+
+import { FileStorageService } from './services/file-storage.service';
+
+@Module({
+  imports: [],
+  controllers: [],
+  providers: [FileStorageService],
+  exports: [FileStorageService],
+})
+export class FileStorageModule {}
+
+и папкой services с файлом file-storage.service.ts
+## Анализ кода FileStorageService
+
+### 1. Исходный код с комментариями
+```typescript
+// Импорт встроенного модуля crypto для генерации UUID
+import { randomUUID } from 'node:crypto';
+// Импорт встроенного модуля path для работы с файловыми путями
+import * as path from 'node:path';
+
+// Импорты необходимых команд и клиента S3 из AWS SDK
+import {
+  DeleteObjectCommand,
+  PutObjectCommand,
+  S3Client,
+} from '@aws-sdk/client-s3';
+// Импорт декоратора Injectable из NestJS для создания инжектируемого сервиса
+import { Injectable } from '@nestjs/common';
+// Импорт сервиса конфигурации для доступа к переменным окружения
+import { ConfigService } from '@nestjs/config';
+
+// Импорт типов конфигурации и интерфейса настроек AWS
+import { AwsConfig, ConfigType } from '../../../configs/config.type';
+// Импорт кастомного логгера для ведения логов
+import { LoggerService } from '../../logger/logger.service';
+// Импорт перечисления для типов контента
+import { ContentType } from '../enums/content-type.enum';
+
+// Декоратор Injectable для обозначения класса как инжектируемого сервиса
+@Injectable()
+export class FileStorageService {
+  private readonly awsConfig: AwsConfig; // Конфигурация AWS, полученная из сервиса конфигурации
+  private readonly s3Client: S3Client;   // Клиент для работы с S3
+
+  // Конструктор принимает LoggerService и ConfigService в качестве зависимостей
+  constructor(
+    private readonly logger: LoggerService,
+    private readonly configService: ConfigService<ConfigType>,
+  ) {
+    // Инициализация конфигурации AWS
+    this.awsConfig = this.configService.get<AwsConfig>('aws');
+    // Инициализация клиента S3 с настройками
+    this.s3Client = new S3Client({
+      forcePathStyle: true,
+      endpoint: this.awsConfig.endpoint,
+      region: this.awsConfig.region,
+      credentials: {
+        accessKeyId: this.awsConfig.accessKey,
+        secretAccessKey: this.awsConfig.secretKey,
+      },
+    });
+  }
+
+  // Метод для загрузки файла в S3
+  public async uploadFile(
+    file: Express.Multer.File, // Входящий файл от Multer
+    itemType: ContentType,     // Тип контента, например, 'image', 'video'
+    itemId: string,            // Идентификатор объекта
+  ): Promise<string> {         // Метод возвращает путь к файлу
+    try {
+      // Генерация пути для хранения файла
+      const filePath = this.buildPath(itemType, itemId, file.originalname);
+      // Отправка команды на загрузку файла в S3
+      await this.s3Client.send(
+        new PutObjectCommand({
+          Bucket: this.awsConfig.bucketName,
+          Key: filePath,
+          Body: file.buffer,
+          ContentType: file.mimetype,
+          ACL: 'public-read', // Файл будет публично доступен
+        }),
+      );
+      return filePath; // Возвращение пути к файлу
+    } catch (error) {
+      // Логирование ошибки
+      this.logger.error(error);
+    }
+  }
+
+  // Метод для удаления файла из S3
+  public async deleteFile(filePath: string): Promise<void> {
+    try {
+      // Отправка команды на удаление файла в S3
+      await this.s3Client.send(
+        new DeleteObjectCommand({
+          Bucket: this.awsConfig.bucketName,
+          Key: filePath,
+        }),
+      );
+    } catch (error) {
+      // Логирование ошибки
+      this.logger.error(error);
+    }
+  }
+
+  // Метод для генерации пути к файлу
+  private buildPath(
+    itemType: ContentType, // Тип контента
+    itemId: string,        // Идентификатор объекта
+    fileName: string,      // Оригинальное имя файла
+  ): string {
+    // Возвращение пути с использованием UUID и расширения файла
+    return `${itemType}/${itemId}/${randomUUID()}${path.extname(fileName)}`;
+  }
+}
+```
+
+### 2. Детальный разбор
+
+#### Импорты и зависимости
+- **`import { randomUUID } from 'node:crypto';`** — импорт встроенной функции для генерации уникальных идентификаторов.
+- **`import * as path from 'node:path';`** — импорт модуля для работы с путями.
+- **Импорты из `@aws-sdk/client-s3`** — необходимые команды для взаимодействия с S3.
+- **Импорты из `@nestjs/common` и `@nestjs/config`** — декораторы и сервис для внедрения зависимостей.
+- **Кастомные импорты** (`AwsConfig`, `LoggerService`, `ContentType`) используются для настройки и логирования.
+
+#### Конструктор
+- **`constructor`** инициализирует клиент S3 с настройками, взятыми из `ConfigService`. Связь с экосистемой NestJS
+через внедрение зависимостей.
+
+#### Методы
+- **`uploadFile`** — асинхронный метод для загрузки файлов в S3 с использованием `PutObjectCommand`.
+- **`deleteFile`** — асинхронный метод для удаления файлов с использованием `DeleteObjectCommand`.
+- **`buildPath`** — создает путь для файла, используя тип контента, идентификатор и уникальный UUID.
+
+### 3. Возможности расширения кода
+- **Добавление новых параметров**: Добавление кастомных метаданных или версионности в параметры `PutObjectCommand`
+для расширения функциональности.
+- **Обработка ошибок**: Улучшение обработки ошибок через добавление типов исключений или кастомных сообщений.
+- **Поддержка шифрования**: Добавление поддержки шифрования файлов в S3 для повышения безопасности.
+
+### 4. Рекомендации по улучшению
+- **Производительность**: Использование `Multipart Upload` для больших файлов.
+- **Безопасность**: Защита ключей доступа через использование менеджеров секретов (например, AWS Secrets Manager).
+- **Читаемость**: Разделение больших методов на более мелкие для улучшения читаемости.
+- **Тестируемость**: Добавление моков и тестов для методов, взаимодействующих с AWS.
+
+### 5. Практические примеры
+
+#### Базовое использование
+```typescript
+// Вызов метода uploadFile
+const filePath = await fileStorageService.uploadFile(uploadedFile, ContentType.IMAGE, '12345');
+console.log('Файл загружен по пути:', filePath);
+```
+
+#### Обработка ошибок
+```typescript
+try {
+  const filePath = await fileStorageService.uploadFile(uploadedFile, ContentType.IMAGE, '12345');
+} catch (error) {
+  console.error('Ошибка при загрузке файла:', error);
+}
+```
+
+#### Тестирование
+```typescript
+// Мокирование метода S3Client.send для тестирования
+jest.spyOn(s3Client, 'send').mockResolvedValueOnce({});
+```
+
+### Ссылки на документацию
+- [NestJS ConfigService](https://docs.nestjs.com/techniques/configuration)
+- [AWS SDK S3](https://docs.aws.amazon.com/AWSJavaScriptSDK/v3/latest/clients/client-s3/index.html)
+- [Node.js path module](https://nodejs.org/api/path.html)
+-----------------------
+
+Теперь в этойже папке создадим еще одну папку src/modules/file-storage/enums а в ней файл content-type.enum.ts
+export enum ContentType {
+  IMAGE = 'image',
+  VIDEO = 'video',
+  AUDIO = 'audio',
+  DOCUMENT = 'document',
+  OTHER = 'other',
+}
+
+ВАЖНО теперь добавим FileStorageModule в импорты UsersModule
+
+Чтобы убедиться, что загружаемый файл обрабатывается корректно, мы должны протестировать его, загрузив аватар
+через интерфейс приложения. Если файл не будет отображаться или возникнут ошибки, нужно проверить правильность
+конфигурации и связи с контейнером.
+
+Мы создаем и подключаем сервис через модуль `StorageModule`, который экспортируем в другие модули проекта.
+Тестируем загрузку и работу с файлами через созданные методы, используя локальные контейнеры и эмуляции AWS S3.
+
+Этот процесс позволит нам загружать файлы, управлять ими и сохранять в контейнере с локальной настройкой.
+
+Теперь обновим article/repository.ts
+## Анализ кода `ArticleRepository`
+
+### 1. Исходный код с комментариями
+
+```typescript
+import { Injectable } from '@nestjs/common'; // Декоратор для определения сервиса как инъектируемого провайдера в NestJS.
+import { DataSource, Repository } from 'typeorm'; // Импорт источника данных и базового класса репозитория из TypeORM.
+
+import { ArticleID } from '../../../common/types/entity-ids.type'; // Тип для идентификатора статьи.
+import { ArticleEntity } from '../../../database/entities/article.entity'; // Сущность статьи.
+import { ListArticleQueryDto } from '../../articles/models/dto/req/list-article-query.dto'; // DTO для запроса
+списка статей.
+import { IUserData } from '../../auth/models/interfaces/user-data.interface'; // Интерфейс, представляющий данные
+пользователя.
+
+@Injectable() // Указывает, что класс может быть инъектирован в другие компоненты приложения.
+export class ArticleRepository extends Repository<ArticleEntity> { // Расширение базового репозитория TypeORM для
+работы с ArticleEntity.
+  constructor(private readonly dataSource: DataSource) { // Конструктор принимает DataSource для работы с БД.
+    super(ArticleEntity, dataSource.manager); // Инициализация базового репозитория с использованием сущности и менеджера.
+  }
+
+  public async findAll(
+    userData: IUserData, // Данные пользователя, которые используются в запросе.
+    query: ListArticleQueryDto, // DTO для фильтрации запроса.
+  ): Promise<[ArticleEntity[], number]> { // Возвращает массив статей и общее количество записей.
+    const qb = this.createQueryBuilder('article'); // Создание QueryBuilder для сущности 'article'.
+    qb.leftJoinAndSelect('article.tags', 'tag'); // Присоединение таблицы тегов с выборкой.
+    qb.leftJoinAndSelect('article.user', 'user'); // Присоединение таблицы пользователей с выборкой.
+    qb.leftJoinAndSelect(
+      'user.followings', // Присоединение таблицы следований пользователей.
+      'following',
+      'following.follower_id = :userId',
+      { userId: userData.userId }, // Передача параметра userId в запрос.
+    );
+
+    if (query.search) { // Проверка наличия параметра поиска.
+      qb.andWhere('CONCAT(article.title, article.description) ILIKE :search'); // Поиск по заголовку и описанию.
+      qb.setParameter('search', `%${query.search}%`); // Установка значения для поиска с использованием подстановки.
+    }
+    if (query.tag) { // Проверка наличия фильтра по тегу.
+      qb.andWhere('tag.name = :tag', { tag: query.tag }); // Фильтрация по имени тега.
+    }
+    qb.take(query.limit); // Лимит записей.
+    qb.skip(query.offset); // Смещение записей.
+
+    return await qb.getManyAndCount(); // Выполнение запроса и получение результатов.
+  }
+
+  public async getById(
+    userData: IUserData, // Данные пользователя для фильтрации.
+    articleId: ArticleID, // Идентификатор статьи.
+  ): Promise<ArticleEntity> { // Возвращает одну сущность статьи.
+    const qb = this.createQueryBuilder('article'); // Создание QueryBuilder.
+    qb.leftJoinAndSelect('article.tags', 'tag'); // Присоединение таблицы тегов.
+    qb.leftJoinAndSelect('article.user', 'user'); // Присоединение таблицы пользователей.
+    qb.leftJoinAndSelect(
+      'user.followings', // Присоединение таблицы следований.
+      'following',
+      'following.follower_id = :userId',
+      { userId: userData.userId }, // Передача параметра userId.
+    );
+    qb.where('article.id = :articleId', { articleId }); // Условие для поиска по идентификатору.
+    return await qb.getOne(); // Выполнение запроса и получение одной сущности.
+  }
+}
+```
+
+### 2. Детальный разбор
+- `import { Injectable } from '@nestjs/common';`
+  - Декоратор `@Injectable()` делает класс инъектируемым в другие компоненты.
+  Подробнее: [NestJS Providers](https://docs.nestjs.com/providers).
+
+- `import { DataSource, Repository } from 'typeorm';`
+  - DataSource используется для конфигурации и подключения к базе данных, а Repository предоставляет методы
+  для работы с сущностями. Подробнее: [TypeORM Repository](https://typeorm.io/repository-api).
+
+- Конструктор класса использует `DataSource` для инициализации репозитория `ArticleEntity`.
+
+### 3. Возможности расширения кода
+- **Параметры запроса**: можно добавить больше фильтров, таких как сортировка, фильтрация по автору и датам публикации.
+- **Методы поиска**: расширить функциональность поиска, включая полнотекстовый поиск или использование ElasticSearch.
+
+### 4. Рекомендации по улучшению
+- **Безопасность**: добавить обработку ошибок с более подробными логами или пользовательскими исключениями.
+- **Производительность**: использовать индексы на часто используемых полях, таких как `title`,
+`description` и `tag.name`, для ускорения поиска.
+- **Читаемость**: разбить длинные методы на более мелкие, выделив сложные части в отдельные приватные методы.
+
+### 5. Примеры использования
+- **Базовое использование**:
+  ```typescript
+  const articles = await articleRepository.findAll(userData, {
+    search: 'example',
+    tag: 'nestjs',
+    limit: 10,
+    offset: 0,
+  });
+  ```
+- **Обработка ошибок**:
+  ```typescript
+  try {
+    const article = await articleRepository.getById(userData, articleId);
+  } catch (error) {
+    logger.error('Failed to fetch article', error);
+  }
+  ```
+
+- **Тестирование**: использовать mock-инструменты для имитации вызовов методов `createQueryBuilder`.
+
+### Заключение
+Код предоставляет гибкий механизм поиска и получения данных, однако есть возможность для улучшения производительности,
+тестируемости и обработки ошибок.
+-------------
+
+Теперь доработаем user-base.res.dto.ts
+import { ApiProperty } from '@nestjs/swagger';
+
+import { UserID } from '../../../../../common/types/entity-ids.type';
+
+export class UserBaseResDto {
+  @ApiProperty({ type: String })
+  id: UserID;
+  name: string;
+  email: string;
+  bio?: string;
+  image?: string;
+  isFollowed?: boolean;
+}
+-------------
+
+Доработаем user.res.dto.ts
+import { PickType } from '@nestjs/swagger';
+
+import { UserBaseResDto } from './user-base.res.dto';
+
+export class UserResDto extends PickType(UserBaseResDto, [
+  'id',
+  'name',
+  'email',
+  'bio',
+  'image',
+  'isFollowed',
+]) {}
+------------
+
+Обновим user.mapper.ts
+import { UserEntity } from '../../../database/entities/user.entity';
+import { IJwtPayload } from '../../auth/models/interfaces/jwt-payload.interface';
+import { IUserData } from '../../auth/models/interfaces/user-data.interface';
+import { UserResDto } from '../models/dto/res/user.res.dto';
+
+export class UserMapper {
+  public static toResDto(user: UserEntity): UserResDto {
+    return {
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      bio: user.bio,
+      image: `${process.env.AWS_S3_ENDPOINT}/${user.image}`,
+      isFollowed: user.followings?.length > 0 || false,
+    };
+  }
+
+  public static toIUserData(
+    user: UserEntity,
+    jwtPayload: IJwtPayload,
+  ): IUserData {
+    return {
+      userId: user.id,
+      deviceId: jwtPayload.deviceId,
+      email: user.email,
+    };
+  }
+}
+------------
+
+Проверим article.service.ts
+import { Injectable } from '@nestjs/common';
+import { In } from 'typeorm';
+
+import { ArticleID } from '../../../common/types/entity-ids.type';
+import { ArticleEntity } from '../../../database/entities/article.entity';
+import { TagEntity } from '../../../database/entities/tag.entity';
+import { IUserData } from '../../auth/models/interfaces/user-data.interface';
+import { ArticleRepository } from '../../repositories/services/article.repository';
+import { TagRepository } from '../../repositories/services/tag.repository';
+import { CreateArticleDto } from '../models/dto/req/create-article.dto';
+import { ListArticleQueryDto } from '../models/dto/req/list-article-query.dto';
+import { UpdateArticleDto } from '../models/dto/req/update-article.dto';
+
+@Injectable()
+export class ArticlesService {
+  constructor(
+    private readonly articleRepository: ArticleRepository,
+    private readonly tagRepository: TagRepository,
+  ) {}
+
+  public async create(
+    userData: IUserData,
+    dto: CreateArticleDto,
+  ): Promise<ArticleEntity> {
+    const tags = await this.createTags(dto.tags);
+
+    return await this.articleRepository.save(
+      this.articleRepository.create({ ...dto, tags, user_id: userData.userId }),
+    );
+  }
+
+  public async findAll(
+    userData: IUserData,
+    query: ListArticleQueryDto,
+  ): Promise<[ArticleEntity[], number]> {
+    return await this.articleRepository.findAll(userData, query);
+  }
+
+  public async findOne(
+    userData: IUserData,
+    articleId: ArticleID,
+  ): Promise<ArticleEntity> {
+    return await this.articleRepository.getById(userData, articleId);
+  }
+
+  public async update(
+    userData: IUserData,
+    articleId: ArticleID,
+    updateUserDto: UpdateArticleDto,
+  ): Promise<ArticleEntity> {
+    return {} as any;
+  }
+
+  private async createTags(tags: string[]): Promise<TagEntity[]> {
+    if (!tags || !tags.length) return [];
+
+    const entities = await this.tagRepository.findBy({ name: In(tags) });
+    const existingTags = entities.map((tag) => tag.name);
+    const newTags = tags.filter((tag) => !existingTags.includes(tag));
+    const newEntities = await this.tagRepository.save(
+      newTags.map((tag) => this.tagRepository.create({ name: tag })),
+    );
+    return [...entities, ...newEntities];
+  }
+}
+-----------
+
+Обновим article.controller.ts
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Query,
+} from '@nestjs/common';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
+
+import { ArticleID } from '../../common/types/entity-ids.type';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { IUserData } from '../auth/models/interfaces/user-data.interface';
+import { CreateArticleDto } from './models/dto/req/create-article.dto';
+import { ListArticleQueryDto } from './models/dto/req/list-article-query.dto';
+import { UpdateArticleDto } from './models/dto/req/update-article.dto';
+import { ArticleResDto } from './models/dto/res/article.res.dto';
+import { ArticleListResDto } from './models/dto/res/article-list.res.dto';
+import { ArticlesMapper } from './services/articles.mapper';
+import { ArticlesService } from './services/articles.service';
+
+@ApiBearerAuth()
+@ApiTags('Articles')
+@Controller('articles')
+export class ArticlesController {
+  constructor(private readonly articleService: ArticlesService) {}
+
+  @Post()
+  public async create(
+    @CurrentUser() userData: IUserData,
+    @Body() dto: CreateArticleDto,
+  ): Promise<ArticleResDto> {
+    const result = await this.articleService.create(userData, dto);
+    return ArticlesMapper.toResDto(result);
+  }
+
+  @Get()
+  public async findAll(
+    @CurrentUser() userData: IUserData,
+    @Query() query: ListArticleQueryDto,
+  ): Promise<ArticleListResDto> {
+    const [entities, total] = await this.articleService.findAll(
+      userData,
+      query,
+    );
+    return ArticlesMapper.toResDtoList(entities, total, query);
+  }
+
+  @Get(':articleId')
+  public async findOne(
+    @CurrentUser() userData: IUserData,
+    @Param('articleId') articleId: ArticleID,
+  ): Promise<ArticleResDto> {
+    const result = await this.articleService.findOne(userData, articleId);
+    return ArticlesMapper.toResDto(result);
+  }
+
+  @Patch(':articleId')
+  public async update(
+    @CurrentUser() userData: IUserData,
+    @Param('articleId') articleId: ArticleID,
+    @Body() dto: UpdateArticleDto,
+  ): Promise<ArticleResDto> {
+    const result = await this.articleService.update(userData, articleId, dto);
+    return ArticlesMapper.toResDto(result);
+  }
+}
