@@ -1,0 +1,955 @@
+Давайте по плану. Сегодня у нас останется занятие, на котором мы будем добавлять новые элементы в проект.
+У нас будет еще две лекции: одна по транзакциям, другая по тестированию бизнес-логики. Поэтому мы сегодня не
+будем затрагивать некоторые темы, завершим основные.
+
+Итак, приступим. Я хотел бы поговорить о том, что такое индексация в базах данных. Индексация предназначена для того,
+чтобы ускорить поиск данных в базе. Например, если нам необходимо найти пользователя по имени, создается индекс для
+этого поля, и это позволяет базе данных быстрее выполнять поиск. При наличии индекса система быстрее определяет,
+где в базе данных находится нужная информация, и позволяет получить результат быстрее, чем при обычном поиске.
+Это делается путем добавления дополнительной колонки, которая упорядочивает данные в определенном порядке,
+что облегчает быстрый доступ к информации.
+
+Индексы бывают разных видов, и я хотел бы показать вам один базовый пример. Когда данные в базе сортированы с
+использованием индекса, поиск выполняется быстрее, так как система знает порядок хранения данных и может использовать
+бинарный поиск. Это работает следующим образом: система проверяет, находится ли искомое значение ниже или выше
+относительно текущей позиции в отсортированном списке. Это позволяет быстро находить записи, используя лишь половину
+данных, и делит процесс поиска на две части. Например, если мы ищем конкретного пользователя по его имени,
+бинарный поиск позволит нам достичь нужного результата в несколько раз быстрее.
+
+Когда индекс существует, база данных хранит данные в правильно отсортированной форме. Индексы можно добавлять для полей,
+по которым часто выполняется поиск, но стоит учитывать, что индексация занимает дополнительное место в памяти,
+а также немного замедляет запись новых данных. Это происходит из-за того, что каждый раз при добавлении новых данных
+база данных должна пересчитать индексы. Но при этом поиск становится значительно быстрее, что полезно в случаях,
+когда часто требуется искать данные по одному и тому же полю.
+
+Теперь мы можем добавить уникальность для некоторых полей с использованием индекса. Уникальные индексы гарантируют,
+что в таблице не будет повторяющихся значений для определенных полей. Это особенно полезно для полей,
+которые должны содержать уникальные значения, такие как идентификаторы. Например, в таблице лайков мы можем создать
+уникальный индекс по полям `user_id` и `article_id`, чтобы один пользователь не мог поставить лайк одной и той же
+статье дважды. Если кто-то попытается создать запись с такими же значениями, база данных выдаст ошибку,
+так как уникальность не будет соблюдена. Для примера добавим индекс в наш файл user.entity.ts
+import {
+  Column,
+  Entity,
+  Index,
+  OneToMany,
+  PrimaryGeneratedColumn,
+} from 'typeorm';
+
+import { UserID } from '../../common/types/entity-ids.type';
+import { ArticleEntity } from './article.entity';
+import { CommentEntity } from './comment.entity';
+import { TableNameEnum } from './enums/table-name.enum';
+import { FollowEntity } from './follow.entity';
+import { LikeEntity } from './like.entity';
+import { CreateUpdateModel } from './models/create-update.model';
+import { RefreshTokenEntity } from './refresh-token.entity';
+
+@Index(['name'])
+@Entity(TableNameEnum.USERS)
+export class UserEntity extends CreateUpdateModel {
+  @PrimaryGeneratedColumn('uuid')
+  id: UserID;
+
+  @Column('text')
+  name: string;
+
+  @Column('text', { unique: true })
+  email: string;
+
+  @Column('text', { select: false })
+  password: string;
+
+  @Column('boolean', { default: true })
+  isActive: boolean;
+
+  @Column('text', { nullable: true })
+  bio: string;
+
+  @Column('text', { nullable: true })
+  image: string;
+
+  @Column('timestamp', { nullable: true })
+  deleted?: Date;
+
+  @OneToMany(() => RefreshTokenEntity, (entity) => entity.user)
+  refreshTokens?: RefreshTokenEntity[];
+
+  @OneToMany(() => ArticleEntity, (entity) => entity.user)
+  articles?: ArticleEntity[];
+
+  @OneToMany(() => LikeEntity, (entity) => entity.user)
+  likes?: LikeEntity[];
+
+  @OneToMany(() => CommentEntity, (entity) => entity.user)
+  comments?: CommentEntity[];
+
+  @OneToMany(() => FollowEntity, (entity) => entity.follower)
+  followers?: FollowEntity[];
+
+  @OneToMany(() => FollowEntity, (entity) => entity.following)
+  followings?: FollowEntity[];
+}
+------------
+
+Уникальные индексы обеспечивают надежную проверку данных, но они также занимают дополнительное пространство и
+немного замедляют добавление записей. Поэтому их нужно добавлять только там, где это необходимо.
+Мы можем также добавить индекс для одного поля или для нескольких, чтобы повысить эффективность поиска по
+определенным критериям. Так же после добавления индекса надо снова сгенерировать миграцию и запустить её для
+того чтобы он добавился к нашей базе данных.
+
+Итак, давайте добавим новый уникальный индекс для таблицы, который будет охватывать два поля: `user_id` и `article_id`.
+Это поможет избежать повторных лайков от одного и того же пользователя для одной и той же статьи.
+Для єтого обновим наш файл like.entity.ts
+## Анализ кода `LikeEntity`
+
+### 1. Исходный код с комментариями
+```typescript
+// Импорт необходимых декораторов и типов из библиотеки TypeORM
+import {
+  Column,               // Декоратор для обозначения колонки в таблице
+  CreateDateColumn,     // Декоратор для автоматического создания колонки с временной меткой при создании записи
+  Entity,               // Декоратор для обозначения класса как сущности в базе данных
+  Index,                // Декоратор для создания индекса на указанные поля
+  JoinColumn,           // Декоратор для обозначения связи между колонкой и внешним ключом
+  ManyToOne,            // Декоратор для описания связи "многие к одному"
+  PrimaryGeneratedColumn, // Декоратор для обозначения первичного ключа с автоматической генерацией UUID
+} from 'typeorm';
+
+// Импорт типов для использования в типизации свойств сущности
+import { ArticleID, LikeID, UserID } from '../../common/types/entity-ids.type';
+// Импорт сущностей для установления связей с ними
+import { ArticleEntity } from './article.entity';
+import { TableNameEnum } from './enums/table-name.enum';
+import { UserEntity } from './user.entity';
+
+// Создание уникального индекса на комбинацию полей user_id и article_id
+@Index(['user_id', 'article_id'], { unique: true })
+// Объявление класса как сущности и привязка к таблице LIKES
+@Entity(TableNameEnum.LIKES)
+export class LikeEntity {
+  // Генерация уникального первичного ключа (UUID)
+  @PrimaryGeneratedColumn('uuid')
+  id: LikeID;
+
+  // Колонка, автоматически заполняемая датой создания записи
+  @CreateDateColumn()
+  created: Date;
+
+  // Колонка для хранения ID пользователя, установившего "лайк"
+  @Column()
+  user_id: UserID;
+
+  // Связь "многие к одному" с таблицей пользователей
+  @ManyToOne(() => UserEntity, (entity) => entity.likes)
+  @JoinColumn({ name: 'user_id' }) // Определение связи через колонку user_id
+  user?: UserEntity;
+
+  // Колонка для хранения ID статьи, на которую установлен "лайк"
+  @Column()
+  article_id: ArticleID;
+
+  // Связь "многие к одному" с таблицей статей
+  @ManyToOne(() => ArticleEntity, (entity) => entity.likes)
+  @JoinColumn({ name: 'article_id' }) // Определение связи через колонку article_id
+  article?: ArticleEntity;
+}
+```
+
+### 2. Детальный разбор
+**Импорты:**
+- `Column`, `CreateDateColumn`, `Entity`, и другие декораторы импортируются из `typeorm` и служат для аннотации
+классов и их свойств, чтобы они соответствовали структуре базы данных. Подробнее [здесь](https://typeorm.io/entities).
+
+**Аннотация `@Entity(TableNameEnum.LIKES)`:**
+- Означает, что класс `LikeEntity` представляет собой сущность в базе данных, связанную с таблицей, имя которой
+указано в `TableNameEnum.LIKES`. Это позволяет TypeORM управлять данной сущностью при взаимодействии с базой данных.
+
+**`@PrimaryGeneratedColumn('uuid')`:**
+- Декоратор для автоматического создания первичного ключа с типом `UUID`, что обеспечивает уникальность каждой записи.
+
+**`@CreateDateColumn()`:**
+- Создает колонку, которая автоматически заполняется текущей датой и временем при создании записи.
+Это полезно для отслеживания времени создания записи.
+Подробнее [здесь](https://typeorm.io/decorator-reference#create-date-column).
+
+**`@Column()`:**
+- Стандартный декоратор для обозначения колонки в таблице. В данном случае используется для `user_id` и `article_id`.
+
+**`@ManyToOne(() => UserEntity, (entity) => entity.likes)`:**
+- Устанавливает связь "многие к одному" с `UserEntity`, что означает, что каждая запись в таблице `LIKES` может
+быть связана с одним пользователем. Подробнее [здесь](https://typeorm.io/many-to-one-one-to-many-relations).
+
+**`@JoinColumn({ name: 'user_id' })`:**
+- Означает, что текущая колонка `user_id` является внешним ключом и ссылается на колонку `id` в сущности `UserEntity`.
+
+### 3. Возможности расширения
+**Дополнительные параметры/опции:**
+- `@Column({ nullable: true })`: Можно использовать, чтобы позволить колонке принимать `null` значения.
+- `@Index()`: Индексы можно расширять, добавляя дополнительные параметры, например, для создания индексов с сортировкой.
+
+**Примеры:**
+```typescript
+@Index(['user_id', 'article_id'], { unique: true, where: 'deleted_at IS NULL' })
+```
+*Пояснение*: Этот индекс будет уникальным только для записей, у которых `deleted_at` равно `NULL`.
+
+### 4. Рекомендации по улучшению
+**Производительность:**
+- Рассмотрите добавление полей, таких как `updatedAt`, для отслеживания времени обновления записи,
+используя `@UpdateDateColumn()`.
+
+**Безопасность:**
+- Добавьте валидаторы для проверки значений `user_id` и `article_id`, чтобы предотвратить ошибки при сохранении данных.
+
+**Читаемость и поддерживаемость:**
+- Комментарии и подробные JSDoc-аннотации помогут другим разработчикам лучше понять структуру и связи сущности.
+
+### 5. Примеры использования
+**Базовый пример:**
+```typescript
+const like = new LikeEntity();
+like.user_id = userId;
+like.article_id = articleId;
+await likeRepository.save(like);
+```
+
+**Расширенные сценарии:**
+- Получение всех лайков пользователя:
+```typescript
+const userLikes = await likeRepository.find({ where: { user_id: someUserId } });
+```
+
+**Обработка ошибок:**
+- Используйте глобальные фильтры исключений для перехвата ошибок при работе с сущностью `LikeEntity`.
+
+**Тестирование:**
+- Используйте библиотеки, такие как `jest`, для тестирования создания и получения данных:
+```typescript
+it('should create a like', async () => {
+  const like = new LikeEntity();
+  like.user_id = testUserId;
+  like.article_id = testArticleId;
+  await expect(likeRepository.save(like)).resolves.not.toThrow();
+});
+```
+
+**Вывод:**
+`LikeEntity` — хорошо структурированная сущность, предназначенная для управления лайками в приложении.
+Она эффективно связана с пользователями и статьями через связи `ManyToOne`, что позволяет реализовать различные
+функциональные возможности, включая отслеживание взаимодействия пользователей с контентом.
+-------------------
+
+Кроме того, я хотел бы сказать, что индексы, уникальные индексы и primary ключи значительно ускоряют доступ к данным.
+Primary ключи (@PrimaryGeneratedColumn('uuid')) особенно полезны, так как они являются основными для поиска и
+связывания записей в базе данных. Когда мы ищем данные по primary ключу, система быстрее находит нужные записи
+благодаря индексу, привязанному к этому ключу.
+
+Теперь, когда у нас есть новый индекс, мы можем проверить, как он работает при попытке добавить записи.
+Это покажет нам, как база данных реагирует на попытку добавления повторяющихся данных и как индексация влияет
+на скорость выполнения запроса. Для этого сгенерируем новую миграцию
+npm run migration:generate -name=add-index
+и запустим её
+migration:run
+После этого в базе данных в таблице likes добавится папка indexes  с двумя полями.
+В разных базах данных индекс работает по-разному. Postgres сохраняет все данные в отдельной таблице,
+есди это MySql то она имеет отдельную таблицу где будут лежать наш праймари кей плюс наша запись и когда мы будем
+искать что-то по записи мы всегда например находтм праймари кей потом по нему идем в оновную нашу табличку берем
+поиск по праймари кей и находим весь рядок.
+
+Теперь, когда я добавлю новый лайк к статье, система проверит, есть ли уже такой лайк в базе данных.
+Если да, то она выбросит ошибку и не позволит записать дублирующийся лайк. Таким образом, индексы помогают нам
+поддерживать данные в базе в актуальном состоянии и предотвращать появление ошибок.
+
+Таким образом, мы сегодня обсудили индексы и их важность.
+
+Далее доработаем наши файлы. Для начала возьмем наш файл articles.controller.ts
+## Анализ кода ArticlesController
+
+### 1. Исходный код с комментариями
+```typescript
+import {
+  Body, // Декоратор для извлечения тела запроса
+  Controller, // Декоратор для обозначения контроллера
+  Delete, // Декоратор для создания метода DELETE
+  Get, // Декоратор для создания метода GET
+  Param, // Декоратор для извлечения параметров из URL
+  ParseUUIDPipe, // Пайп для валидации параметров UUID
+  Patch, // Декоратор для создания метода PATCH
+  Post, // Декоратор для создания метода POST
+  Query, // Декоратор для извлечения query-параметров
+} from '@nestjs/common'; // Модуль NestJS для общих декораторов и функций
+
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger'; // Декораторы для Swagger-документации
+
+import { ArticleID } from '../../common/types/entity-ids.type'; // Тип для ID статьи
+import { CurrentUser } from '../auth/decorators/current-user.decorator'; // Кастомный декоратор для извлечения
+текущего пользователя
+import { IUserData } from '../auth/models/interfaces/user-data.interface'; // Интерфейс для описания данных пользователя
+import { CreateArticleDto } from './models/dto/req/create-article.dto'; // DTO для создания статьи
+import { ListArticleQueryDto } from './models/dto/req/list-article-query.dto'; // DTO для query-параметров списка статей
+import { UpdateArticleDto } from './models/dto/req/update-article.dto'; // DTO для обновления статьи
+import { ArticleResDto } from './models/dto/res/article.res.dto'; // DTO для ответа с информацией о статье
+import { ArticleListResDto } from './models/dto/res/article-list.res.dto'; // DTO для ответа с информацией о списке статей
+import { ArticlesMapper } from './services/articles.mapper'; // Сервис для маппинга данных
+import { ArticlesService } from './services/articles.service'; // Основной сервис для работы со статьями
+
+@ApiBearerAuth() // Декоратор для указания, что эндпоинты требуют аутентификации
+@ApiTags('Articles') // Декоратор для указания названия группы в Swagger-документации
+@Controller('articles') // Декоратор для определения контроллера с маршрутом 'articles'
+export class ArticlesController {
+  constructor(private readonly articleService: ArticlesService) {} // Внедрение зависимости сервиса статей
+
+  @Post() // Обрабатывает POST-запросы на '/articles'
+  public async create(
+    @CurrentUser() userData: IUserData, // Извлечение данных текущего пользователя
+    @Body() dto: CreateArticleDto, // Извлечение тела запроса и приведение к типу CreateArticleDto
+  ): Promise<ArticleResDto> {
+    const result = await this.articleService.create(userData, dto); // Вызов метода создания статьи в сервисе
+    return ArticlesMapper.toResDto(result); // Преобразование результата в формат ответа DTO
+  }
+
+  @Get() // Обрабатывает GET-запросы на '/articles'
+  public async findAll(
+    @CurrentUser() userData: IUserData, // Извлечение данных текущего пользователя
+    @Query() query: ListArticleQueryDto, // Извлечение query-параметров запроса
+  ): Promise<ArticleListResDto> {
+    const [entities, total] = await this.articleService.findAll(userData, query); // Вызов метода получения всех статей
+    return ArticlesMapper.toResDtoList(entities, total, query); // Преобразование данных в формат ответа DTO
+  }
+
+  @Get(':articleId') // Обрабатывает GET-запросы на '/articles/:articleId'
+  public async findOne(
+    @CurrentUser() userData: IUserData, // Извлечение данных текущего пользователя
+    @Param('articleId', ParseUUIDPipe) articleId: ArticleID, // Валидация параметра articleId как UUID
+  ): Promise<ArticleResDto> {
+    const result = await this.articleService.findOne(userData, articleId); // Вызов метода получения одной статьи
+    return ArticlesMapper.toResDto(result); // Преобразование результата в формат ответа DTO
+  }
+
+  @Patch(':articleId') // Обрабатывает PATCH-запросы на '/articles/:articleId'
+  public async update(
+    @CurrentUser() userData: IUserData, // Извлечение данных текущего пользователя
+    @Param('articleId', ParseUUIDPipe) articleId: ArticleID, // Валидация параметра articleId как UUID
+    @Body() dto: UpdateArticleDto, // Извлечение тела запроса и приведение к типу UpdateArticleDto
+  ): Promise<ArticleResDto> {
+    const result = await this.articleService.update(userData, articleId, dto); // Вызов метода обновления статьи
+    return ArticlesMapper.toResDto(result); // Преобразование результата в формат ответа DTO
+  }
+
+  @Post(':articleId/like') // Обрабатывает POST-запросы на '/articles/:articleId/like'
+  public async like(
+    @CurrentUser() userData: IUserData, // Извлечение данных текущего пользователя
+    @Param('articleId', ParseUUIDPipe) articleId: ArticleID, // Валидация параметра articleId как UUID
+  ): Promise<void> {
+    await this.articleService.like(userData, articleId); // Вызов метода лайка статьи
+  }
+
+  @Delete(':articleId/like') // Обрабатывает DELETE-запросы на '/articles/:articleId/like'
+  public async unlike(
+    @CurrentUser() userData: IUserData, // Извлечение данных текущего пользователя
+    @Param('articleId', ParseUUIDPipe) articleId: ArticleID, // Валидация параметра articleId как UUID
+  ): Promise<void> {
+    await this.articleService.unlike(userData, articleId); // Вызов метода отмены лайка статьи
+  }
+}
+```
+
+### 2. Детальный разбор
+#### Импорты и их источники:
+- Все импорты `@nestjs/common` предоставляют встроенные декораторы и функции для создания контроллеров и
+обработки запросов. Подробнее в [документации NestJS](https://docs.nestjs.com/controllers).
+- Декораторы из `@nestjs/swagger` позволяют автоматизировать создание документации API.
+Подробнее в [документации Swagger](https://docs.nestjs.com/openapi/introduction).
+
+#### Комментарии:
+- `@ApiBearerAuth()` и `@ApiTags('Articles')` — добавляют метаданные для автоматической генерации Swagger-документации.
+- `@Controller('articles')` определяет базовый маршрут для всех эндпоинтов контроллера.
+
+### 3. Возможности расширения
+- Добавление дополнительных методов, таких как комментирование статей.
+- Поддержка фильтрации статей по категориям и тегам.
+
+### 4. Рекомендации по улучшению
+- **Оптимизация производительности**: Использовать кеширование для частых запросов.
+- **Безопасность**: Добавить защиту от CSRF.
+- **Читаемость**: Комментарии с пояснением входных и выходных данных методов.
+- **Тестируемость**: Создать тесты для каждого метода, используя `jest` и `supertest`.
+
+### 5. Примеры использования
+#### Базовые примеры:
+- **Создание статьи**:
+  ```typescript
+  const newArticle = await articlesController.create(currentUser, {
+    title: 'New Article',
+    content: 'This is the content of the article.',
+  });
+  ```
+
+- **Получение списка статей**:
+  ```typescript
+  const articles = await articlesController.findAll(currentUser, { page: 1, limit: 10 });
+  ```
+
+#### Расширенные сценарии:
+- **Добавление логики проверок**: Добавить проверку прав пользователя перед обновлением или удалением статей.
+- **Обработка ошибок**: Использование глобальных фильтров исключений для унификации ответов на ошибки, например,
+возврат кода `404`, если статья не найдена.
+
+#### Тестирование:
+- **Unit-тест для метода `create`**:
+  ```typescript
+  it('should create a new article', async () => {
+    const dto = { title: 'Test Article', content: 'Test Content' };
+    const result = await articlesController.create(mockUser, dto);
+    expect(result).toBeDefined();
+    expect(result.title).toBe('Test Article');
+  });
+  ```
+
+### Заключение
+Контроллер `ArticlesController` построен с учетом базовых практик NestJS, что делает его устойчивым и удобным для
+расширения. Возможности добавления новых функций и улучшения уже существующих методов позволяют легко адаптировать
+его под новые требования.
+--------------------
+
+Теперь доработаем article.service.ts
+## Анализ кода `ArticlesService`
+
+### 1. Исходный код с комментариями
+```typescript
+// Импорт базовых исключений и декоратора Injectable из NestJS
+import {
+  ConflictException, // Исключение для конфликтных ситуаций (например, попытка лайкнуть уже понравившуюся статью)
+  Injectable,        // Декоратор, обозначающий, что класс является сервисом, который можно внедрять
+  NotFoundException, // Исключение, выбрасываемое, когда запрашиваемый ресурс не найден
+} from '@nestjs/common';
+
+// Импорт функционала для использования операторов из TypeORM
+import { In } from 'typeorm';
+
+// Импорт типов, сущностей и интерфейсов из разных модулей проекта
+import { ArticleID } from '../../../common/types/entity-ids.type'; // Тип для идентификатора статьи
+import { ArticleEntity } from '../../../database/entities/article.entity'; // Сущность статьи
+import { TagEntity } from '../../../database/entities/tag.entity'; // Сущность тега
+import { IUserData } from '../../auth/models/interfaces/user-data.interface'; // Интерфейс данных пользователя
+import { ArticleRepository } from '../../repositories/services/article.repository'; // Репозиторий для работы со статьями
+import { LikeRepository } from '../../repositories/services/like.repository'; // Репозиторий для работы с лайками
+import { TagRepository } from '../../repositories/services/tag.repository'; // Репозиторий для работы с тегами
+import { CreateArticleDto } from '../models/dto/req/create-article.dto'; // DTO для создания статьи
+import { ListArticleQueryDto } from '../models/dto/req/list-article-query.dto'; // DTO для запроса списка статей
+import { UpdateArticleDto } from '../models/dto/req/update-article.dto'; // DTO для обновления статьи
+
+// Декоратор Injectable указывает, что этот класс является сервисом и может быть внедрен в другие компоненты
+@Injectable()
+export class ArticlesService {
+  constructor(
+    // Внедрение репозиториев через конструктор для управления статьями, тегами и лайками
+    private readonly articleRepository: ArticleRepository,
+    private readonly tagRepository: TagRepository,
+    private readonly likeRepository: LikeRepository,
+  ) {}
+
+  // Метод для создания новой статьи
+  public async create(
+    userData: IUserData, // Данные текущего пользователя
+    dto: CreateArticleDto, // DTO с данными для создания статьи
+  ): Promise<ArticleEntity> {
+    // Создание тегов, если они указаны
+    const tags = await this.createTags(dto.tags);
+
+    // Создание и сохранение новой статьи с привязкой к пользователю
+    return await this.articleRepository.save(
+      this.articleRepository.create({ ...dto, tags, user_id: userData.userId }),
+    );
+  }
+
+  // Метод для получения всех статей с учетом параметров фильтрации
+  public async findAll(
+    userData: IUserData, // Данные текущего пользователя
+    query: ListArticleQueryDto, // Параметры запроса
+  ): Promise<[ArticleEntity[], number]> {
+    // Вызов метода репозитория для получения списка статей
+    return await this.articleRepository.findAll(userData, query);
+  }
+
+  // Метод для получения одной статьи по ID
+  public async findOne(
+    userData: IUserData, // Данные текущего пользователя
+    articleId: ArticleID, // Идентификатор статьи
+  ): Promise<ArticleEntity> {
+    // Вызов метода репозитория для получения статьи по ID
+    return await this.articleRepository.getById(userData, articleId);
+  }
+
+  // Метод для обновления статьи (пока заглушка)
+  public async update(
+    userData: IUserData, // Данные текущего пользователя
+    articleId: ArticleID, // Идентификатор статьи
+    updateUserDto: UpdateArticleDto, // DTO с данными для обновления
+  ): Promise<ArticleEntity> {
+    // Заглушка для реализации
+    return {} as any;
+  }
+
+  // Метод для добавления лайка статье
+  public async like(userData: IUserData, articleId: ArticleID): Promise<void> {
+    // Проверка существования статьи по ID
+    const article = await this.articleRepository.findOneBy({ id: articleId });
+    if (!article) {
+      throw new NotFoundException('Article not found');
+    }
+
+    // Проверка, лайкал ли уже пользователь данную статью
+    const like = await this.likeRepository.findOneBy({
+      user_id: userData.userId,
+      article_id: articleId,
+    });
+    if (like) {
+      throw new ConflictException('You already liked this article');
+    }
+
+    // Сохранение нового лайка
+    await this.likeRepository.save(
+      this.likeRepository.create({
+        user_id: userData.userId,
+        article_id: articleId,
+      }),
+    );
+  }
+
+  // Метод для удаления лайка
+  public async unlike(
+    userData: IUserData, // Данные текущего пользователя
+    articleId: ArticleID, // Идентификатор статьи
+  ): Promise<void> {
+    // Проверка существования статьи по ID
+    const article = await this.articleRepository.findOneBy({ id: articleId });
+    if (!article) {
+      throw new NotFoundException('Article not found');
+    }
+
+    // Проверка, существует ли лайк от текущего пользователя
+    const like = await this.likeRepository.findOneBy({
+      user_id: userData.userId,
+      article_id: articleId,
+    });
+    if (!like) {
+      throw new ConflictException('You have not liked this article yet');
+    }
+
+    // Удаление лайка
+    await this.likeRepository.remove(like);
+  }
+
+  // Приватный метод для создания новых тегов или получения существующих
+  private async createTags(tags: string[]): Promise<TagEntity[]> {
+    if (!tags || !tags.length) return []; // Если теги не указаны, возвращается пустой массив
+
+    // Поиск существующих тегов в базе данных
+    const entities = await this.tagRepository.findBy({ name: In(tags) });
+    const existingTags = entities.map((tag) => tag.name); // Извлечение имен существующих тегов
+    const newTags = tags.filter((tag) => !existingTags.includes(tag)); // Фильтрация новых тегов
+
+    // Сохранение новых тегов и возврат всех тегов
+    const newEntities = await this.tagRepository.save(
+      newTags.map((tag) => this.tagRepository.create({ name: tag })),
+    );
+    return [...entities, ...newEntities];
+  }
+}
+```
+
+### 2. Детальный разбор
+#### Импорты и зависимости
+- **Импорты из `@nestjs/common`**: Используются стандартные исключения и декоратор `Injectable`.
+- **Импорты из `typeorm`**: Оператор `In` используется для поиска нескольких значений в запросе к базе данных.
+
+#### Конструктор и зависимости
+- **Конструктор**: Инициализация репозиториев через инъекцию зависимостей позволяет управлять данными статей,
+тегов и лайков. Это помогает поддерживать принцип инверсии зависимостей и делает сервис более тестируемым.
+
+#### Методы `create`, `findAll`, `findOne`, `like`, `unlike`
+- **Метод `create`**:
+  - Создает новые теги, если они не существуют, и сохраняет статью с привязкой к пользователю.
+  - Использует метод `createTags`, чтобы избежать дублирования тегов в базе данных.
+
+- **Методы `findAll` и `findOne`**:
+  - Позволяют извлекать статьи из базы данных с использованием репозиториев.
+  - Поддержка DTO для упрощения работы с запросами.
+
+- **Методы `like` и `unlike`**:
+  - Обрабатывают операции по добавлению и удалению лайков.
+  - Генерируют исключения при неправильных операциях (например, если статья не найдена или лайк уже существует).
+
+#### Метод `createTags`
+- Позволяет добавлять новые теги или использовать уже существующие.
+
+### 3. Возможности расширения кода
+
+#### Расширение функциональности
+- **Добавление новых методов**:
+  - **Метод для удаления статьи**: Можно добавить метод для удаления статьи с проверкой прав пользователя.
+  - **Комментирование статей**: Можно добавить функционал для работы с комментариями
+  (например, `addComment`, `deleteComment`).
+
+- **Расширение DTO**:
+  - Добавление новых полей в DTO, таких как изображение или категории статьи, потребует обновления `CreateArticleDto`
+  и `UpdateArticleDto`.
+  - Можно добавить валидацию для новых полей с помощью декораторов из пакета `class-validator`.
+
+- **Пагинация и сортировка**:
+  - Метод `findAll` можно расширить с поддержкой сортировки и пагинации. Например, добавить параметры `sortBy`
+  и `order` в `ListArticleQueryDto`.
+
+#### Примеры дополнительных возможностей:
+- **Добавление транзакций**:
+  - Можно использовать `QueryRunner` для обеспечения атомарности операций, когда необходимо сохранить целостность
+  данных в нескольких связанных репозиториях.
+  ```typescript
+  const queryRunner = this.dataSource.createQueryRunner();
+  await queryRunner.connect();
+  await queryRunner.startTransaction();
+  try {
+    // операции с базой данных
+    await queryRunner.commitTransaction();
+  } catch (error) {
+    await queryRunner.rollbackTransaction();
+  } finally {
+    await queryRunner.release();
+  }
+  ```
+
+### 4. Рекомендации по улучшению
+
+#### Производительность
+- **Оптимизация запросов**:
+  - Использовать метод `select` в запросах, чтобы выбирать только необходимые поля, а не загружать всю сущность.
+  - Применение кеширования данных, например, с использованием Redis, чтобы снизить нагрузку на базу данных при
+  частых запросах.
+
+#### Безопасность
+- **Проверка прав доступа**:
+  - Проверить, что пользователь имеет право обновлять или удалять статьи. Добавить Guard или middleware для проверки прав.
+
+#### Читаемость и масштабируемость
+- **Рефакторинг методов**:
+  - Разделить методы на более мелкие функции для улучшения читаемости, например, вынести проверки существования
+  статьи или лайков в отдельные утилиты.
+- **Логгирование**:
+  - Добавить логирование операций для упрощения диагностики ошибок и отслеживания действий пользователя.
+
+### 5. Примеры использования
+
+#### Базовое использование
+- **Создание статьи**:
+  ```typescript
+  const newArticle = await articlesService.create(userData, createArticleDto);
+  ```
+
+- **Добавление лайка**:
+  ```typescript
+  try {
+    await articlesService.like(userData, articleId);
+    console.log('Article liked successfully');
+  } catch (error) {
+    console.error(error.message);
+  }
+  ```
+
+#### Обработка ошибок
+- **Проверка на существование статьи**:
+  ```typescript
+  try {
+    const article = await articlesService.findOne(userData, articleId);
+  } catch (error) {
+    if (error instanceof NotFoundException) {
+      console.error('Article not found');
+    }
+  }
+  ```
+
+#### Тестирование
+- **Юнит-тесты для метода `like`**:
+  ```typescript
+  describe('like', () => {
+    it('should throw NotFoundException if article does not exist', async () => {
+      jest.spyOn(articleRepository, 'findOneBy').mockResolvedValue(null);
+      await expect(articlesService.like(userData, articleId))
+        .rejects
+        .toThrow(NotFoundException);
+    });
+
+    it('should throw ConflictException if user already liked the article', async () => {
+      jest.spyOn(likeRepository, 'findOneBy').mockResolvedValue({} as any);
+      await expect(articlesService.like(userData, articleId))
+        .rejects
+        .toThrow(ConflictException);
+    });
+  });
+  ```
+
+### Заключение
+Данный сервис `ArticlesService` выполняет функции управления статьями, включая создание, обновление,
+получение и работу с лайками. Реализация базируется на использовании репозиториев и стандартных компонентов NestJS,
+что делает её масштабируемой и легко расширяемой.
+-----------------
+
+Далее обновим article.repository.ts
+## Анализ кода `ArticleRepository`
+
+### 1. Исходный код с комментариями
+
+```typescript
+import { Injectable } from '@nestjs/common'; // Импортирует декоратор Injectable для объявления зависимостей в NestJS.
+import { DataSource, Repository } from 'typeorm'; // Импортирует DataSource для работы с базой данных и Repository
+для управления сущностями.
+
+import { ArticleID } from '../../../common/types/entity-ids.type'; // Импортирует тип для идентификации статьи.
+import { ArticleEntity } from '../../../database/entities/article.entity'; // Импортирует сущность статьи, которая
+представляет таблицу в базе данных.
+import { ListArticleQueryDto } from '../../articles/models/dto/req/list-article-query.dto'; // Импортирует DTO
+для запроса списка статей.
+import { IUserData } from '../../auth/models/interfaces/user-data.interface'; // Импортирует интерфейс данных
+пользователя для идентификации пользователя.
+
+@Injectable() // Декоратор делает класс доступным для внедрения в качестве зависимости.
+export class ArticleRepository extends Repository<ArticleEntity> { // Наследует от базового репозитория TypeORM
+для работы с ArticleEntity.
+  constructor(private readonly dataSource: DataSource) { // Конструктор принимает источник данных для передачи в
+  базовый класс.
+    super(ArticleEntity, dataSource.manager); // Инициализирует базовый класс с сущностью ArticleEntity и менеджером
+    соединений.
+  }
+
+  // Метод для получения всех статей с учетом фильтров.
+  public async findAll(
+    userData: IUserData, // Данные пользователя, используемые для фильтрации.
+    query: ListArticleQueryDto, // DTO для запроса с параметрами фильтрации.
+  ): Promise<[ArticleEntity[], number]> { // Возвращает массив сущностей и количество найденных записей.
+    const qb = this.createQueryBuilder('article'); // Создает QueryBuilder с псевдонимом "article".
+    qb.leftJoinAndSelect('article.tags', 'tag'); // Левое соединение с таблицей тегов.
+    qb.leftJoinAndSelect('article.user', 'user'); // Левое соединение с таблицей пользователей.
+    qb.leftJoinAndSelect( // Левое соединение с таблицей подписок.
+      'user.followings',
+      'following',
+      'following.follower_id = :userId',
+    );
+    qb.leftJoinAndSelect('article.likes', 'like', 'like.user_id = :userId'); // Левое соединение с таблицей лайков.
+    qb.setParameter('userId', userData.userId); // Устанавливает значение параметра userId.
+
+    if (query.search) { // Проверяет наличие параметра поиска.
+      qb.andWhere('CONCAT(article.title, article.description) ILIKE :search'); // Добавляет условие поиска по
+      заголовку и описанию статьи.
+      qb.setParameter('search', `%${query.search}%`); // Устанавливает значение параметра для поиска.
+    }
+    if (query.tag) { // Проверяет наличие параметра тега.
+      qb.andWhere('tag.name = :tag', { tag: query.tag }); // Добавляет условие фильтрации по тегу.
+    }
+    qb.take(query.limit); // Ограничивает количество возвращаемых записей.
+    qb.skip(query.offset); // Пропускает указанное количество записей.
+
+    return await qb.getManyAndCount(); // Выполняет запрос и возвращает массив сущностей и общее количество записей.
+  }
+
+  // Метод для получения статьи по ID с учетом данных пользователя.
+  public async getById(
+    userData: IUserData,
+    articleId: ArticleID,
+  ): Promise<ArticleEntity> {
+    const qb = this.createQueryBuilder('article'); // Создает QueryBuilder с псевдонимом "article".
+    qb.leftJoinAndSelect('article.tags', 'tag'); // Левое соединение с таблицей тегов.
+    qb.leftJoinAndSelect('article.user', 'user'); // Левое соединение с таблицей пользователей.
+    qb.leftJoinAndSelect( // Левое соединение с таблицей подписок.
+      'user.followings',
+      'following',
+      'following.follower_id = :userId',
+    );
+    qb.leftJoinAndSelect('article.likes', 'like', 'like.user_id = :userId'); // Левое соединение с таблицей лайков.
+    qb.setParameter('userId', userData.userId); // Устанавливает значение параметра userId.
+
+    qb.where('article.id = :articleId', { articleId }); // Добавляет условие фильтрации по ID статьи.
+    return await qb.getOne(); // Выполняет запрос и возвращает одну статью.
+  }
+}
+```
+
+### 2. Детальный разбор
+
+#### Основные моменты:
+- **ArticleRepository** расширяет класс `Repository`, добавляя специфическую логику для работы с сущностью `ArticleEntity`.
+- **QueryBuilder** используется для сложных запросов, позволяя гибко управлять SQL-запросами.
+- **leftJoinAndSelect**: Выполняет левое соединение с выборкой данных из связанных таблиц.
+- **ILike**: Чувствительный к регистру поиск в PostgreSQL.
+- **Параметры**: Используются для предотвращения SQL-инъекций и безопасной передачи значений в запросы.
+
+#### Пояснение компонентов:
+- **DataSource**: Источник данных, используемый для подключения и выполнения операций с базой данных.
+- **ArticleEntity**: Сущность, представляющая таблицу статей в базе данных.
+
+### 3. Возможности расширения кода
+
+#### Дополнительные параметры:
+- **Параметры сортировки**: Можно добавить сортировку по дате создания, популярности и т.д.
+  ```typescript
+  qb.orderBy('article.createdAt', 'DESC');
+  ```
+
+- **Фильтрация по категории**: Добавить фильтрацию по определенной категории статьи.
+  ```typescript
+  qb.andWhere('article.category = :category', { category: query.category });
+  ```
+
+#### Примеры расширения:
+- **Метод для получения популярных статей**:
+  ```typescript
+  public async findPopularArticles(limit: number): Promise<ArticleEntity[]> {
+    return this.createQueryBuilder('article')
+      .leftJoinAndSelect('article.likes', 'like')
+      .orderBy('COUNT(like.id)', 'DESC')
+      .take(limit)
+      .getMany();
+  }
+  ```
+
+### 4. Рекомендации по улучшению
+
+#### Производительность:
+- **Индексы в базе данных**: Добавить индексы на поля `title` и `description` для ускорения поиска.
+- **Кеширование**: Реализовать кеширование результатов с использованием Redis.
+
+#### Безопасность:
+- **Проверка доступа**: Проверить, что пользователь имеет права на доступ к определенным статьям.
+
+#### Читаемость:
+- **Декомпозиция**: Разделить сложные запросы на несколько функций для улучшения читаемости.
+
+#### Тестируемость:
+- **Мокирование зависимостей**: Для тестирования использовать мок-объекты `dataSource` и `manager`.
+
+### 5. Примеры использования
+
+#### Базовое использование:
+```typescript
+const articles = await articleRepository.findAll(userData, {
+  search: 'example',
+  limit: 10,
+  offset: 0,
+});
+```
+
+#### Обработка ошибок:
+```typescript
+try {
+  const article = await articleRepository.getById(userData, articleId);
+  if (!article) {
+    throw new NotFoundException('Article not found');
+  }
+} catch (error) {
+  console.error('Error fetching article:', error.message);
+}
+```
+
+#### Тестирование:
+```typescript
+describe('ArticleRepository', () => {
+  it('should fetch articles with tags and likes', async () => {
+    const result = await articleRepository.findAll(mockUserData, mockQueryDto);
+    expect(result).toBeDefined();
+    expect(result[0]).toHaveProperty('tags');
+  });
+});
+```
+
+### Заключение
+`ArticleRepository` — это специализированный репозиторий, который использует возможности TypeORM для выполнения
+сложных запросов.
+------------------------
+
+Обновим articles.mapper.ts
+import { Injectable } from '@nestjs/common';
+
+import { ArticleEntity } from '../../../database/entities/article.entity';
+import { UserMapper } from '../../users/services/user.mapper';
+import { ListArticleQueryDto } from '../models/dto/req/list-article-query.dto';
+import { ArticleResDto } from '../models/dto/res/article.res.dto';
+import { ArticleListResDto } from '../models/dto/res/article-list.res.dto';
+
+@Injectable()
+export class ArticlesMapper {
+  public static toResDtoList(
+    data: ArticleEntity[],
+    total: number,
+    query: ListArticleQueryDto,
+  ): ArticleListResDto {
+    return { data: data.map(this.toResDto), total, ...query };
+  }
+
+  public static toResDto(data: ArticleEntity): ArticleResDto {
+    return {
+      id: data.id,
+      title: data.title,
+      description: data.description,
+      body: data.body,
+      created: data.created,
+      updated: data.updated,
+      isLiked: !!data.likes?.length,
+      tags: data.tags ? data.tags.map((tag) => tag.name) : [],
+      user: data.user ? UserMapper.toResDto(data.user) : null,
+    };
+  }
+}
+------------------------
+
+Доработаем article.res.dto.ts
+import { ApiProperty } from '@nestjs/swagger';
+
+import { UserResDto } from '../../../../users/models/dto/res/user.res.dto';
+
+export class ArticleResDto {
+  @ApiProperty({
+    example: '796cea24-a328-4463-a5e1-85a779e4780f',
+    description: 'Article ID',
+  })
+  id: string;
+
+  @ApiProperty({
+    example: 'Article Title',
+    description: 'Article Title',
+  })
+  title: string;
+
+  @ApiProperty({
+    example: 'Article Description',
+    description: 'Article Description',
+  })
+  description: string;
+
+  @ApiProperty({
+    example: 'Article Body',
+    description: 'Article Body',
+  })
+  body: string;
+
+  @ApiProperty({
+    example: '2021-09-29T10:00:00.000Z',
+    description: 'Article Created Date',
+  })
+  created: Date;
+
+  @ApiProperty({
+    example: '2021-09-29T10:00:00.000Z',
+    description: 'Article Updated Date',
+  })
+  updated: Date;
+
+  @ApiProperty({
+    example: ['tag1', 'tag2'],
+    description: 'Article Tags',
+  })
+  tags: string[];
+
+  isLiked: boolean;
+
+  user?: UserResDto;
+}
