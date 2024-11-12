@@ -1,6 +1,5 @@
 import { Injectable } from '@nestjs/common';
 
-import { ArticleID } from '../../../common/types/entity-ids.type';
 import { CreateCommentDto } from '../models/dto/req/create-comment.dto';
 
 @Injectable()
