@@ -1,0 +1,449 @@
+#### Что такое транзакции и зачем они нужны?
+
+**Транзакция** — это последовательность операций, объединенных в одну логическую единицу работы,
+которая либо выполняется полностью, либо откатывается полностью. Это критично для сохранения целостности данных
+в базах данных. Транзакции позволяют выполнять несколько операций — таких как `INSERT`, `UPDATE`, и `DELETE` — так,
+чтобы они были выполнены как одно целое.
+
+**Пример использования транзакций:**
+Представьте, что вы разрабатываете систему управления заказами, где необходимо одновременно сохранить информацию
+о новом заказе и списать средства со счета пользователя. Если одно из действий не удается, например,
+не удается списать средства, то не должно оставаться записи о заказе. Здесь транзакция гарантирует,
+что если одна операция не выполнится, то другая также будет отменена, возвращая базу данных в исходное состояние.
+
+#### Основные команды для работы с транзакциями
+
+- **`BEGIN TRANSACTION`**: начало новой транзакции.
+- **`COMMIT`**: завершение транзакции и фиксация изменений в базе данных.
+- **`ROLLBACK`**: отмена всех изменений, выполненных в рамках транзакции.
+
+**Объяснение на примере:**
+
+```sql
+BEGIN TRANSACTION;
+
+INSERT INTO orders (order_id, product_id, quantity) VALUES (1, 101, 2);
+
+UPDATE products SET stock = stock - 2 WHERE product_id = 101;
+
+-- Если операция прошла успешно, выполняем COMMIT
+COMMIT;
+-- Если произошла ошибка, выполняем ROLLBACK
+-- ROLLBACK;
+```
+
+В этом примере, если во время выполнения одной из операций произойдет ошибка, команда `ROLLBACK` вернет базу
+данных к состоянию до начала транзакции.
+
+#### Свойства ACID и их значение
+
+ACID — это набор свойств, которые обеспечивают надежность и согласованность базы данных при работе с транзакциями.
+
+1. **Атомарность (Atomicity)**
+   Транзакция неделима: она либо выполняется полностью, либо не выполняется вовсе.
+   Например, если в процессе выполнения двух `INSERT`-запросов один завершится ошибкой, оба запроса будут отменены.
+
+2. **Согласованность (Consistency)**
+   Данные должны оставаться корректными после выполнения транзакции. Если транзакция нарушает
+   бизнес-правила (например, снимает больше средств, чем есть на счете), база данных автоматически откатывает транзакцию.
+
+3. **Изоляция (Isolation)**
+   Обеспечивает, чтобы параллельно выполняемые транзакции не влияли друг на друга. Уровень изоляции контролирует,
+   как данные одной транзакции видны другим транзакциям.
+
+4. **Устойчивость (Durability)**
+   Гарантирует, что после коммита данные сохранятся даже при сбое системы.
+
+#### Аномалии при недостаточном уровне изоляции
+
+1. **Нефиксированные чтения (Dirty Reads)**
+   Транзакция читает данные, которые еще не были зафиксированы другой транзакцией. Если та транзакция откатится,
+   первая все равно увидит данные, которые "не существуют".
+
+2. **Неповторяющиеся чтения (Non-repeatable Reads)**
+   Транзакция дважды читает одну и ту же запись и получает разные результаты, потому что другая транзакция изменила
+   и зафиксировала данные между этими чтениями.
+
+3. **Фантомные чтения (Phantom Reads)**
+   Транзакция выполняет запрос, возвращающий набор строк, но при повторном выполнении того же запроса обнаруживает,
+   что набор изменился (например, появились новые строки), так как другая транзакция вставила новые данные и
+   закоммитила их.
+
+#### Заключение
+
+Транзакции позволяют надежно выполнять сложные операции и обеспечивают целостность данных. Свойства ACID гарантируют,
+что каждая транзакция выполняется корректно и безопасно. Контроль уровня изоляции помогает управлять взаимодействием
+параллельных транзакций и предотвращать аномалии.
+
+**Продолжение следует в следующей части**.
+&&&&&&&&&&&&&&
+---
+
+Где указывать уровень изоляции в Postgres, сейчас покажу. Допустим, у нас есть некоторая транзакция.
+Мы обернули транзакцию, и если эта команда выполняется сама по себе, то используется уровень изоляции по умолчанию.
+Но если мы хотим его изменить, то можем выбрать `Isolation level` и указать один из доступных уровней.
+Однако хочу отметить, что самый слабый уровень, `READ UNCOMMITTED`, не поддерживается.
+
+Теперь о вашем вопросе. Если вы интересуетесь, как работает это в Postgres, то объясню, что это касается не TypeORM,
+а самого Postgres.
+
+Теперь перейдем к коду и попробуем написать транзакцию. Я покажу, как это делается на примере.
+Давайте выберем метод `create` и сделаем один запрос для сохранения статей и тегов.
+Для работы с транзакциями нам нужен `EntityManager`. Мы должны использовать его с декоратором `@InjectEntityManager`.
+Это позволяет нам получить доступ к управлению транзакциями.
+
+Когда у нас есть `EntityManager`, все, что мы пишем внутри него, оборачивается в одну транзакцию.
+Это значит, что любой метод, написанный в этом блоке, будет выполняться в рамках одной транзакции, и,
+если возникнет ошибка, транзакция будет откатываться.
+
+Доработаем наш файл articles.services.ts
+## Анализ кода сервиса `ArticlesService`
+
+### 1. Исходный код с комментариями
+```typescript
+import {
+  ConflictException, // Импортирует исключение, выбрасываемое при конфликте данных (например, повторное лайкание статьи).
+  Injectable, // Декоратор, позволяющий использовать класс в качестве провайдера.
+  NotFoundException, // Исключение, выбрасываемое, когда данные не найдены.
+} from '@nestjs/common';
+import { InjectEntityManager } from '@nestjs/typeorm'; // Декоратор для внедрения EntityManager из TypeORM.
+import { EntityManager, In } from 'typeorm'; // Инструменты TypeORM для работы с транзакциями и поисковыми операторами.
+
+import { ArticleID } from '../../../common/types/entity-ids.type'; // Тип для обозначения идентификаторов статей.
+import { ArticleEntity } from '../../../database/entities/article.entity'; // Сущность статьи.
+import { TagEntity } from '../../../database/entities/tag.entity'; // Сущность тега.
+import { IUserData } from '../../auth/models/interfaces/user-data.interface'; // Интерфейс данных пользователя.
+import { ArticleRepository } from '../../repositories/services/article.repository'; // Пользовательский репозиторий статей.
+import { LikeRepository } from '../../repositories/services/like.repository'; // Репозиторий для управления лайками.
+import { TagRepository } from '../../repositories/services/tag.repository'; // Репозиторий тегов.
+import { CreateArticleDto } from '../models/dto/req/create-article.dto'; // DTO для создания статьи.
+import { ListArticleQueryDto } from '../models/dto/req/list-article-query.dto'; // DTO для фильтрации статей.
+import { UpdateArticleDto } from '../models/dto/req/update-article.dto'; // DTO для обновления статьи.
+
+@Injectable() // Декоратор, обозначающий, что этот класс может быть внедрен в другие части приложения.
+export class ArticlesService {
+  constructor(
+    private readonly articleRepository: ArticleRepository, // Репозиторий для работы с сущностями статей.
+    private readonly tagRepository: TagRepository, // Репозиторий для работы с тегами.
+    private readonly likeRepository: LikeRepository, // Репозиторий для управления лайками.
+    @InjectEntityManager() // Внедрение EntityManager для работы с транзакциями.
+    private readonly entityManager: EntityManager,
+  ) {}
+
+  // Метод для создания статьи.
+  public async create(
+    userData: IUserData, // Данные пользователя, создающего статью.
+    dto: CreateArticleDto, // Данные для создания статьи.
+  ): Promise<ArticleEntity> {
+    return await this.entityManager.transaction('SERIALIZABLE', async (em) => { // Использует транзакцию с
+    уровнем изоляции SERIALIZABLE.
+      const articleRepository = em.getRepository(ArticleEntity); // Получение репозитория статей внутри транзакции.
+      const tags = await this.createTags(dto.tags, em); // Создание или получение существующих тегов.
+
+      return await articleRepository.save(
+        articleRepository.create({
+          ...dto, // Передача данных статьи.
+          tags, // Список тегов.
+          user_id: userData.userId, // ID пользователя, создавшего статью.
+        }),
+      );
+    });
+  }
+
+  // Метод для получения всех статей.
+  public async findAll(
+    userData: IUserData, // Данные пользователя, выполняющего запрос.
+    query: ListArticleQueryDto, // Параметры фильтрации.
+  ): Promise<[ArticleEntity[], number]> {
+    return await this.articleRepository.findAll(userData, query); // Использует метод кастомного репозитория
+    для поиска статей.
+  }
+
+  // Метод для получения одной статьи с транзакцией.
+  public async findOne(
+    userData: IUserData,
+    articleId: ArticleID, // Идентификатор статьи.
+  ): Promise<ArticleEntity> {
+    return await this.entityManager.transaction('SERIALIZABLE', async (em) => {
+      return await this.articleRepository.getById(userData, articleId, em); // Получение статьи по ID с
+      использованием транзакции.
+    });
+  }
+
+  // Метод для получения одной статьи без транзакции.
+  public async findOne2(
+    userData: IUserData,
+    articleId: ArticleID,
+  ): Promise<ArticleEntity> {
+    return await this.articleRepository.getById(userData, articleId); // Прямое обращение к репозиторию без
+    использования транзакций.
+  }
+
+  // Метод для обновления статьи (реализация еще не завершена).
+  public async update(
+    userData: IUserData,
+    articleId: ArticleID,
+    updateUserDto: UpdateArticleDto, // Данные для обновления статьи.
+  ): Promise<ArticleEntity> {
+    return {} as any; // Заглушка для будущей реализации.
+  }
+
+  // Метод для добавления лайка к статье.
+  public async like(userData: IUserData, articleId: ArticleID): Promise<void> {
+    const article = await this.articleRepository.findOneBy({ id: articleId }); // Проверка существования статьи.
+    if (!article) {
+      throw new NotFoundException('Article not found'); // Исключение, если статья не найдена.
+    }
+    const like = await this.likeRepository.findOneBy({
+      user_id: userData.userId,
+      article_id: articleId,
+    });
+    if (like) {
+      throw new ConflictException('You already liked this article'); // Исключение при повторном лайке.
+    }
+    await this.likeRepository.save(
+      this.likeRepository.create({
+        user_id: userData.userId,
+        article_id: articleId,
+      }),
+    );
+  }
+
+  // Метод для удаления лайка.
+  public async unlike(
+    userData: IUserData,
+    articleId: ArticleID,
+  ): Promise<void> {
+    const article = await this.articleRepository.findOneBy({ id: articleId }); // Проверка существования статьи.
+    if (!article) {
+      throw new NotFoundException('Article not found');
+    }
+    const like = await this.likeRepository.findOneBy({
+      user_id: userData.userId,
+      article_id: articleId,
+    });
+    if (!like) {
+      throw new ConflictException('You have not liked this article yet'); // Исключение, если лайк не был поставлен.
+    }
+    await this.likeRepository.remove(like); // Удаление лайка.
+  }
+
+  // Вспомогательный метод для создания или поиска тегов.
+  private async createTags(
+    tags: string[], // Массив имен тегов.
+    em: EntityManager,
+  ): Promise<TagEntity[]> {
+    if (!tags || !tags.length) return []; // Возвращает пустой массив, если теги не переданы.
+    const tagRepository = em.getRepository(TagEntity); // Получение репозитория тегов.
+
+    const entities = await tagRepository.findBy({ name: In(tags) }); // Поиск существующих тегов.
+    const existingTags = entities.map((tag) => tag.name); // Массив имен существующих тегов.
+    const newTags = tags.filter((tag) => !existingTags.includes(tag)); // Фильтрация новых тегов.
+    const newEntities = await tagRepository.save(
+      newTags.map((tag) => tagRepository.create({ name: tag })), // Создание новых тегов.
+    );
+    return [...entities, ...newEntities]; // Возвращает объединенный массив новых и существующих тегов.
+  }
+}
+```
+
+### 2. Детальный разбор
+#### Общий обзор кода
+**Назначение**: `ArticlesService` предоставляет методы для создания, обновления, получения и удаления статей,
+а также управления лайками. Он используется для взаимодействия с базой данных и управления логикой,
+связанной со статьями и тегами.
+
+**Место в архитектуре проекта**: Сервис служит частью слоя бизнес-логики и взаимодействует с репозиториями и сущностями.
+
+**Взаимодействие с другими частями**:
+- **Сущности**: `ArticleEntity`, `TagEntity`
+- **Репозитории**: `ArticleRepository`, `LikeRepository`, `TagRepository`
+- **DTO**: `CreateArticleDto`, `ListArticleQueryDto`, `UpdateArticleDto`
+
+### 3. Возможности расширения
+- **Добавление методов для комментариев**: Можно расширить сервис методами для управления комментариями к статьям.
+- **Улучшение обработки транзакций**: Добавление обработки ошибок для транзакций.
+- **Валидация данных**: Добавить уровни валидации на уровне DTO или сервисов.
+
+### 4. Рекомендации по улучшению
+- **Производительность**: Добавить кэширование для часто запрашиваемых данных.
+- **Безопасность**: Использовать Guards для проверки прав пользователя.
+- **Читаемость**: Разделить логику метода `create` на более мелкие методы.
+- **Тестируемость**: Добавить больше модульных тестов для критических методов.
+
+### 5. Примеры использования
+#### Базовое использование:
+- Создание статьи: вызов `create` с данными пользователя и `CreateArticleDto`.
+- Лайк статьи: вызов `like` с `userData` и `articleId`.
+
+#### Расширенные сценарии:
+- Использование транзакций для создания сложных операций с несколькими таблицами.
+- Обработка ошибок при удалении несущестующей записи (`unlike` метод).
+
+#### Обработка
+
+ ошибок:
+- При создании уже существующего лайка вызывается `ConflictException`.
+- Отсутствие статьи или лайка обрабатывается через `NotFoundException`.
+
+### Заключение
+Код `ArticlesService` предоставляет базовые функции для управления статьями и лайками, применяя транзакции для
+обеспечения целостности данных.
+------------
+
+Далее обновим article.repository.ts
+## Анализ кода `ArticleRepository`
+
+### 1. Исходный код с комментариями
+```typescript
+import { Injectable } from '@nestjs/common'; // Декоратор Injectable делает класс доступным для внедрения
+зависимостей в NestJS.
+import { DataSource, EntityManager, Repository } from 'typeorm'; // Импортируем необходимые компоненты
+из TypeORM для работы с базой данных.
+
+import { ArticleID } from '../../../common/types/entity-ids.type'; // Тип данных для идентификаторов статей.
+import { ArticleEntity } from '../../../database/entities/article.entity'; // Сущность статьи, используемая для
+работы с таблицей статей.
+import { ListArticleQueryDto } from '../../articles/models/dto/req/list-article-query.dto'; // DTO для передачи
+параметров фильтрации статей.
+import { IUserData } from '../../auth/models/interfaces/user-data.interface'; // Интерфейс данных пользователя.
+
+@Injectable() // Объявляет класс как сервис для внедрения зависимостей.
+export class ArticleRepository extends Repository<ArticleEntity> { // Расширяет стандартный репозиторий TypeORM для
+кастомной логики.
+  constructor(private readonly dataSource: DataSource) { // Внедрение DataSource для доступа к базе данных.
+    super(ArticleEntity, dataSource.manager); // Передача сущности и менеджера в конструктор родительского класса.
+  }
+
+  // Метод для поиска всех статей с возможностью фильтрации.
+  public async findAll(
+    userData: IUserData, // Данные текущего пользователя.
+    query: ListArticleQueryDto, // Объект DTO с параметрами запроса.
+  ): Promise<[ArticleEntity[], number]> { // Возвращает массив статей и общее количество найденных записей.
+    const qb = this.createQueryBuilder('article'); // Создает query builder с псевдонимом 'article'.
+    qb.leftJoinAndSelect('article.tags', 'tag'); // Присоединяет теги к статье с выборкой данных.
+    qb.leftJoinAndSelect('article.user', 'user'); // Присоединяет пользователя, создавшего статью.
+    qb.leftJoinAndSelect( // Присоединяет таблицу с подписками пользователя.
+      'user.followings',
+      'following',
+      'following.follower_id = :userId',
+    );
+    qb.leftJoinAndSelect('article.likes', 'like', 'like.user_id = :userId'); // Присоединяет лайки статьи для
+    текущего пользователя.
+    qb.setParameter('userId', userData.userId); // Устанавливает значение параметра userId.
+
+    if (query.search) { // Проверяет наличие строки поиска.
+      qb.andWhere('CONCAT(article.title, article.description) ILIKE :search'); // Фильтрует статьи по совпадению
+      в заголовке или описании.
+      qb.setParameter('search', `%${query.search}%`); // Устанавливает параметр для поиска.
+    }
+    if (query.tag) { // Проверяет наличие фильтра по тегам.
+      qb.andWhere('tag.name = :tag', { tag: query.tag }); // Фильтрует статьи по тегу.
+    }
+    qb.take(query.limit); // Устанавливает лимит количества возвращаемых записей.
+    qb.skip(query.offset); // Пропускает заданное количество записей (для пагинации).
+
+    return await qb.getManyAndCount(); // Возвращает массив статей и количество записей.
+  }
+
+  // Метод для получения статьи по ID с возможностью использовать транзакцию.
+  public async getById(
+    userData: IUserData, // Данные текущего пользователя.
+    articleId: ArticleID, // Идентификатор статьи.
+    em?: EntityManager, // Опциональный EntityManager для транзакции.
+  ): Promise<ArticleEntity> {
+    const repo = em ? em.getRepository(ArticleEntity) : this; // Использует переданный EntityManager или текущий
+    репозиторий.
+
+    const qb = repo.createQueryBuilder('article'); // Создает query builder для статьи.
+    qb.leftJoinAndSelect('article.tags', 'tag'); // Присоединяет теги.
+    qb.leftJoinAndSelect('article.user', 'user'); // Присоединяет пользователя.
+    qb.leftJoinAndSelect(
+      'user.followings',
+      'following',
+      'following.follower_id = :userId',
+    );
+    qb.leftJoinAndSelect('article.likes', 'like', 'like.user_id = :userId');
+    qb.setParameter('userId', userData.userId); // Устанавливает параметр userId.
+    qb.where('article.id = :articleId', { articleId }); // Фильтрует статью по ID.
+
+    return await qb.getOne(); // Возвращает одну статью или null, если не найдено.
+  }
+}
+```
+
+### 2. Детальный разбор
+
+#### 1. Общий обзор кода
+- **Назначение**: `ArticleRepository` расширяет стандартный репозиторий TypeORM, добавляя методы для выборки статей
+с фильтрацией и получением по идентификатору с учетом привязанных данных (лайков, тегов, подписок).
+- **Место в архитектуре**: Класс является частью слоя данных, взаимодействует с базой данных через TypeORM и
+используется в сервисах для доступа к данным.
+- **Взаимодействие**: Репозиторий взаимодействует с сущностями (`ArticleEntity`, `TagEntity` и `UserEntity` через join'ы)
+и получает параметры от DTO и интерфейсов.
+
+#### 2. Построчный анализ кода
+- `import { Injectable } from '@nestjs/common';` — импортирует декоратор `Injectable`, который делает класс доступным
+для DI в NestJS.
+- `import { DataSource, EntityManager, Repository } from 'typeorm';` — импортирует компоненты TypeORM для работы с
+репозиториями и транзакциями.
+- `import { ArticleID } from '../../../common/types/entity-ids.type';` — импортирует тип данных для идентификатора статьи.
+- `@Injectable()` — декоратор, указывающий, что класс может быть инжектирован в другие части приложения.
+- `constructor(private readonly dataSource: DataSource) { ... }` — внедряет `DataSource` для доступа к базе данных
+и передает `EntityManager` в базовый класс `Repository`.
+
+#### Методы:
+- **`findAll`**:
+  - Создает query builder для выборки статей с join'ами на теги, пользователей и подписки.
+  - Фильтрует статьи по строке поиска и тегу.
+  - Параметры `limit` и `offset` используются для пагинации.
+- **`getById`**:
+  - Похож на `findAll`, но возвращает одну статью по идентификатору.
+  - Поддерживает опциональное использование `EntityManager` для работы внутри транзакции.
+
+### 3. Возможности расширения кода
+- **Фильтрация по дате**: можно добавить фильтрацию по дате создания или обновления статьи.
+- **Сортировка**: поддержка сортировки по различным полям.
+- **Обработка ошибок**: добавление логирования ошибок.
+- **Дополнительные join'ы**: можно подключить больше связей, например, комментарии.
+
+### 4. Оптимизация и улучшения
+- **Производительность**: добавить индексы в базе данных для часто используемых полей (`title`, `description`).
+- **Читаемость**: разбить длинные цепочки `join` на методы-хелперы.
+- **Безопасность**: добавить проверки на авторизацию пользователя при доступе к данным.
+- **Тестируемость**: внедрение моков для тестирования взаимодействий с базой.
+
+### 5. Примеры использования
+#### Базовое использование:
+```typescript
+const articles = await articleRepository.findAll(userData, { limit: 10, offset: 0 });
+```
+#### Обработка ошибок:
+```typescript
+try {
+  const article = await articleRepository.getById(userData, articleId);
+  if (!article) throw new NotFoundException('Article not found');
+} catch (error) {
+  console.error('Error fetching article:', error);
+}
+```
+#### Тестирование:
+```typescript
+jest.spyOn(articleRepository, 'findAll').mockResolvedValue([[], 0]);
+```
+
+### Заключение
+Код `ArticleRepository` хорошо интегрирован с TypeORM и соответствует стандартам NestJS.
+Он предоставляет гибкие методы для поиска статей, которые можно расширить и оптимизировать для повышения
+производительности и удобства использования.
+-----------------------
+
+Мы можем использовать метод `getRepository()` с `EntityManager`, чтобы получить доступ к репозиторию сущностей.
+Важно, чтобы операции с базой данных выполнялись через этот менеджер, иначе они будут происходить в разных транзакциях.
+
+Например, если я сохраню статьи и теги в одной транзакции, и что-то пойдет не так, вся операция откатится,
+и данные не будут сохранены. Если `EntityManager` не используется, то статьи и теги будут сохраняться в отдельных
+транзакциях, что может привести к ситуации, когда статья сохранится, а теги — нет, или наоборот.
+
+Теперь, если вы хотите объединить сохранение статьи и тегов в одну транзакцию, вам нужно передать `EntityManager`
+в соответствующий метод. В случае ошибки транзакция будет отменена, и данные останутся неизменными.
